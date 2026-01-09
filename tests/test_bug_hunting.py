@@ -524,39 +524,32 @@ def test_bug_hunt_foreign_key_from_nonexistent_column():
 
 def test_bug_hunt_empty_primary_key_list():
     """Test table with empty primary key list."""
-    cfg = ConfigSpec(
-        tables={
-            "t": TableSpec(
-                primary_key=[],  # Empty PK
-                columns={
-                    "id": ColumnSpec(type="text", nullable=False),
-                },
-            )
-        }
-    )
-
-    # Should work - tables can have no PK (though not recommended)
-    db = DB(url="postgresql+psycopg://u:p@localhost:5432/db", config=cfg)
-    assert db.registry.tables["t"].primary_key == []
+    with pytest.raises(ValueError, match="primary_key is required"):
+        ConfigSpec(
+            tables={
+                "t": TableSpec(
+                    primary_key=[],  # Empty PK
+                    columns={
+                        "id": ColumnSpec(type="text", nullable=False),
+                    },
+                )
+            }
+        )
 
 
 def test_bug_hunt_primary_key_on_nullable_column():
     """Test if PK can be defined on nullable column."""
-    cfg = ConfigSpec(
-        tables={
-            "t": TableSpec(
-                primary_key=["id"],
-                columns={
-                    "id": ColumnSpec(type="text", nullable=True),  # PK but nullable?
-                },
-            )
-        }
-    )
-
-    # This should probably be caught, but might not be
-    db = DB(url="postgresql+psycopg://u:p@localhost:5432/db", config=cfg)
-    # PostgreSQL will actually reject this, but our validation doesn't check it
-    # BUG: We should validate that PK columns are non-nullable
+    with pytest.raises(Exception, match="primary_key column must be non-nullable"):
+        ConfigSpec(
+            tables={
+                "t": TableSpec(
+                    primary_key=["id"],
+                    columns={
+                        "id": ColumnSpec(type="text", nullable=True),  # PK but nullable
+                    },
+                )
+            }
+        )
 
 
 def test_bug_hunt_index_on_nonexistent_column():
@@ -589,25 +582,18 @@ def test_bug_hunt_index_on_nonexistent_column():
 
 def test_bug_hunt_upsert_with_no_primary_key_no_conflict_cols():
     """Test upsert on table without PK and without conflict_cols."""
-    cfg = ConfigSpec(
-        tables={
-            "t": TableSpec(
-                primary_key=[],  # No PK
-                columns={
-                    "id": ColumnSpec(type="text", nullable=False),
-                    "name": ColumnSpec(type="text", nullable=False),
-                },
-            )
-        }
-    )
-    db = DB(url="postgresql+psycopg://u:p@localhost:5432/db", config=cfg)
-
-    Model = db.models["t"]
-    obj = Model(id="1", name="test")
-
-    # BUG CHECK: Should raise error since no PK and no conflict_cols
-    with pytest.raises(ValueError, match="no primary key"):
-        db.upsert("t", obj)
+    with pytest.raises(ValueError, match="primary_key is required"):
+        ConfigSpec(
+            tables={
+                "t": TableSpec(
+                    primary_key=[],  # No PK
+                    columns={
+                        "id": ColumnSpec(type="text", nullable=False),
+                        "name": ColumnSpec(type="text", nullable=False),
+                    },
+                )
+            }
+        )
 
 
 def test_bug_hunt_upsert_conflict_cols_not_in_object():

@@ -137,6 +137,27 @@ class ArtifactStore:
 
         url = self._resolve_url(y, z, source=str(x_path))
 
+        # Security: prevent directory traversal when writing under a local base_url.
+        # Only applies to relative targets (joined under base_url). Absolute targets
+        # are treated as explicit opt-out.
+        if (not self._is_absolute_target(y)):
+            parsed = urlparse(url)
+            if parsed.scheme in ("", "file"):
+                base_root = self._local_path(self.base_url)
+                dst = self._local_path(url)
+
+                try:
+                    base_resolved = base_root.resolve(strict=False)
+                    dst_resolved = dst.resolve(strict=False)
+                    if not dst_resolved.is_relative_to(base_resolved):
+                        raise ValueError("directory traversal detected in target path")
+                except AttributeError:
+                    # Fallback for older Python without Path.is_relative_to
+                    base_resolved = os.path.realpath(str(base_root))
+                    dst_resolved = os.path.realpath(str(dst))
+                    if os.path.commonpath([dst_resolved, base_resolved]) != base_resolved:
+                        raise ValueError("directory traversal detected in target path")
+
         # If y targets a file (not a directory), enforce extension match.
         y_is_dir = y.endswith("/")
         if not y_is_dir and self._looks_like_file_target(y):

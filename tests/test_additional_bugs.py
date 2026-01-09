@@ -20,21 +20,15 @@ from agentfabric.config.spec import ColumnSpec, ConfigSpec, TableSpec
 
 def test_bug_empty_table_name_should_be_rejected():
     """BUG: Empty string as table name is accepted but creates unusable table."""
-    cfg = ConfigSpec(
-        tables={
-            "": TableSpec(
-                primary_key=["id"],
-                columns={"id": ColumnSpec(type="text", nullable=False)},
-            )
-        }
-    )
-
-    # This should raise an error but doesn't
-    db = DB(url="postgresql+psycopg://u:p@localhost:5432/db", config=cfg)
-    assert "" in db.tables  # Empty table name exists!
-
-    # Try to use it - this will likely cause problems
-    # This is a bug - empty table names should be rejected during validation
+    with pytest.raises(Exception, match="table name cannot be empty"):
+        ConfigSpec(
+            tables={
+                "": TableSpec(
+                    primary_key=["id"],
+                    columns={"id": ColumnSpec(type="text", nullable=False)},
+                )
+            }
+        )
 
 
 # ============================================================================
@@ -48,27 +42,19 @@ def test_bug_duplicate_column_names_different_case():
     In PostgreSQL, identifiers are case-insensitive by default, so 'Name' and
     'name' would refer to the same column. This should be caught during validation.
     """
-    cfg = ConfigSpec(
-        tables={
-            "t": TableSpec(
-                primary_key=["id"],
-                columns={
-                    "id": ColumnSpec(type="text", nullable=False),
-                    "Name": ColumnSpec(type="text", nullable=False),
-                    "name": ColumnSpec(type="text", nullable=False),  # Duplicate!
-                },
-            )
-        }
-    )
-
-    # This should raise an error but doesn't
-    db = DB(url="postgresql+psycopg://u:p@localhost:5432/db", config=cfg)
-
-    # Both columns exist in the config
-    assert "Name" in db.registry.tables["t"].columns
-    assert "name" in db.registry.tables["t"].columns
-
-    # This is a bug - case-insensitive duplicates should be rejected
+    with pytest.raises(Exception, match="duplicate column name"):
+        ConfigSpec(
+            tables={
+                "t": TableSpec(
+                    primary_key=["id"],
+                    columns={
+                        "id": ColumnSpec(type="text", nullable=False),
+                        "Name": ColumnSpec(type="text", nullable=False),
+                        "name": ColumnSpec(type="text", nullable=False),  # Duplicate!
+                    },
+                )
+            }
+        )
 
 
 # ============================================================================
@@ -93,12 +79,9 @@ def test_bug_table_name_starting_with_number_creates_invalid_class():
 
     db = DB(url="postgresql+psycopg://u:p@localhost:5432/db", config=cfg)
 
-    # The class name is "123table" which is invalid Python
     class_name = db.models["123table"].__name__
-    assert class_name == "123table"
-
-    # This is a bug - the class name should be prefixed or transformed
-    # to be a valid Python identifier (e.g., "Table123" or "_123table")
+    assert class_name != "123table"
+    assert class_name.isidentifier()
 
 
 # ============================================================================
@@ -112,20 +95,17 @@ def test_bug_empty_primary_key_causes_sqlalchemy_error():
     While PostgreSQL allows tables without primary keys, SQLAlchemy's ORM
     requires at least one primary key column for mapped classes.
     """
-    cfg = ConfigSpec(
-        tables={
-            "t": TableSpec(
-                primary_key=[],  # Empty PK
-                columns={
-                    "id": ColumnSpec(type="text", nullable=False),
-                },
-            )
-        }
-    )
-
-    # This raises SQLAlchemy error during model creation
-    with pytest.raises(Exception, match="could not assemble any primary key"):
-        DB(url="postgresql+psycopg://u:p@localhost:5432/db", config=cfg)
+    with pytest.raises(ValueError, match="primary_key is required"):
+        ConfigSpec(
+            tables={
+                "t": TableSpec(
+                    primary_key=[],  # Empty PK
+                    columns={
+                        "id": ColumnSpec(type="text", nullable=False),
+                    },
+                )
+            }
+        )
 
 
 # ============================================================================
@@ -139,25 +119,17 @@ def test_bug_primary_key_on_nullable_column_not_validated():
     PostgreSQL will reject this, but our validation doesn't catch it early.
     This would cause runtime errors when trying to create the schema.
     """
-    cfg = ConfigSpec(
-        tables={
-            "t": TableSpec(
-                primary_key=["id"],
-                columns={
-                    "id": ColumnSpec(type="text", nullable=True),  # PK but nullable!
-                },
-            )
-        }
-    )
-
-    # This should raise a validation error but doesn't
-    db = DB(url="postgresql+psycopg://u:p@localhost:5432/db", config=cfg)
-
-    # The config is created successfully
-    assert db.registry.tables["t"].columns["id"].nullable is True
-    assert "id" in db.registry.tables["t"].primary_key
-
-    # This is a bug - primary key columns should be validated as non-nullable
+    with pytest.raises(Exception, match="primary_key column must be non-nullable"):
+        ConfigSpec(
+            tables={
+                "t": TableSpec(
+                    primary_key=["id"],
+                    columns={
+                        "id": ColumnSpec(type="text", nullable=True),  # PK but nullable!
+                    },
+                )
+            }
+        )
 
 
 # ============================================================================
@@ -182,18 +154,8 @@ def test_potential_bug_artifact_store_directory_traversal(tmp_path: Path):
     src = tmp_path / "test.txt"
     src.write_text("secret data")
 
-    # Try to use directory traversal
-    result = store.put(src, "../outside/escaped.txt")
-
-    # Check where the file actually ended up
-    escaped_file = outside_dir / "escaped.txt"
-
-    if escaped_file.exists():
-        print("SECURITY BUG: Directory traversal allowed!")
-        print(f"File written to: {escaped_file}")
-        print(f"Content: {escaped_file.read_text()}")
-        # This is a security vulnerability
-        assert False, "Directory traversal should be blocked!"
+    with pytest.raises(ValueError, match="directory traversal"):
+        store.put(src, "../outside/escaped.txt")
 
 
 # ============================================================================

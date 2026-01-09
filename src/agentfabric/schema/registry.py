@@ -62,6 +62,13 @@ class SchemaRegistry:
     def from_config(cls, cfg: ConfigSpec) -> "SchemaRegistry":
         reg = cls(postgres_schema=cfg.postgres_schema)
 
+        def _get(obj: Any, key: str) -> Any:
+            if hasattr(obj, key):
+                return getattr(obj, key)
+            if isinstance(obj, dict):
+                return obj.get(key)
+            raise TypeError(f"invalid foreign key spec item: missing '{key}'")
+
         for table_name, ts in cfg.tables.items():
             t = reg.register_table(table_name)
             t.primary_key = list(ts.primary_key)
@@ -80,10 +87,10 @@ class SchemaRegistry:
             t.indexes = [IndexDef(name=i.name, columns=list(i.columns)) for i in ts.indexes]
             t.foreign_keys = [
                 ForeignKeyDef(
-                    columns=list(fk.columns),
-                    ref_table=fk.ref_table,
-                    ref_columns=list(fk.ref_columns),
-                    on_delete=fk.on_delete,
+                    columns=list(_get(fk, "columns")),
+                    ref_table=str(_get(fk, "ref_table")),
+                    ref_columns=list(_get(fk, "ref_columns")),
+                    on_delete=_get(fk, "on_delete"),
                 )
                 for fk in ts.foreign_keys
             ]

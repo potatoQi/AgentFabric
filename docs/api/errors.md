@@ -23,7 +23,7 @@
 
 ### `DB.upsert`
 
-- `ValueError("no primary key defined; provide conflict_cols")`：表无主键且未提供 conflict_cols
+- `ValueError("no primary key defined; provide conflict_cols")`：`upsert()` 未提供 conflict_cols 且表无主键（通常仅在绕过配置校验/手工构造 schema 时可能发生）
 - `sqlalchemy.exc.IntegrityError`：违反 DB 约束（NOT NULL / UNIQUE / FK / CHECK 等）
 
 ## Filter DSL（build_where）

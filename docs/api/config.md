@@ -48,7 +48,7 @@ tables:
 ```python
 class TableSpec(BaseModel):
     description: str | None = None
-    primary_key: list[str] = []
+    primary_key: list[str]
     columns: dict[str, ColumnSpec]
     indexes: list[IndexSpec] = []
     foreign_keys: list[ForeignKeySpec] = []
@@ -56,8 +56,10 @@ class TableSpec(BaseModel):
 
 ### primary_key
 
+- 必填：每个表都必须定义至少 1 个主键列。
 - 支持复合主键：按列表顺序生成 `PRIMARY KEY(col1, col2, ...)`。
 - 注意：复合主键的顺序会影响 upsert 默认 conflict key。
+- 约束：所有主键列必须存在于 `columns`，且必须 `nullable: false`。
 
 ### columns
 

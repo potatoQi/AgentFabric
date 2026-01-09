@@ -48,18 +48,16 @@ tables:
 
 
 def test_registry_validates_pk_columns_exist() -> None:
-    cfg = ConfigSpec(
-        postgres_schema=None,
-        tables={
-            "t": TableSpec(
-                primary_key=["missing"],
-                columns={"id": ColumnSpec(type="text", nullable=False)},
-            )
-        },
-    )
-
-    with pytest.raises(ValueError, match="primary_key column not found"):
-        SchemaRegistry.from_config(cfg)
+    with pytest.raises(Exception, match="primary_key column not found"):
+        ConfigSpec(
+            postgres_schema=None,
+            tables={
+                "t": TableSpec(
+                    primary_key=["missing"],
+                    columns={"id": ColumnSpec(type="text", nullable=False)},
+                )
+            },
+        )
 
 
 def test_registry_validates_fk_references_exist() -> None:

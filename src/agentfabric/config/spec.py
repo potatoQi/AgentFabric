@@ -45,8 +45,40 @@ class TableSpec(BaseModel):
     indexes: list[IndexSpec] = Field(default_factory=list)
     foreign_keys: list[ForeignKeySpec] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def _validate_columns_and_primary_key(self):
+        if not self.primary_key:
+            raise ValueError("primary_key is required for every table")
+
+        # Postgres treats unquoted identifiers as case-insensitive.
+        # We reject case-insensitive duplicates to avoid ambiguous schemas.
+        lowered: dict[str, str] = {}
+        for name in self.columns.keys():
+            key = name.lower()
+            if key in lowered:
+                raise ValueError(
+                    f"duplicate column name (case-insensitive): {lowered[key]!r} vs {name!r}"
+                )
+            lowered[key] = name
+
+        # If PK is specified, all PK columns must exist and be non-nullable.
+        for pk in self.primary_key:
+            if pk not in self.columns:
+                raise ValueError(f"primary_key column not found: {pk}")
+            if self.columns[pk].nullable:
+                raise ValueError(f"primary_key column must be non-nullable: {pk}")
+
+        return self
+
 
 class ConfigSpec(BaseModel):
     version: int = 1
     postgres_schema: str | None = None
     tables: dict[str, TableSpec]
+
+    @model_validator(mode="after")
+    def _validate_table_names(self):
+        for tname in self.tables.keys():
+            if not isinstance(tname, str) or tname.strip() == "":
+                raise ValueError("table name cannot be empty")
+        return self
