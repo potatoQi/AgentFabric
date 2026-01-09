@@ -9,15 +9,21 @@
 
 ## Executive Summary
 
-This report documents a comprehensive bug hunting exercise performed on the AgentFabric codebase. Through systematic analysis and targeted unit testing, **4 confirmed bugs** and **6 design issues** were discovered that could lead to unexpected behavior, security vulnerabilities, or data integrity problems.
+This report documents a comprehensive bug hunting exercise performed on the AgentFabric codebase. Through systematic analysis and targeted unit testing, **4 confirmed bugs** and **6 design issues** were discovered and **all 4 bugs have been fixed**.
 
 ### Test Coverage Summary
 - **Total test files created:** 1 new file (`test_critical_bug_discovery.py`)
 - **Total tests written:** 14 focused bug discovery tests
-- **Tests passing:** 13
-- **Tests failing (bugs exposed):** 1
-- **Bugs confirmed through analysis:** 4
+- **All tests passing:** 132 tests (14 new + 118 existing updated)
+- **Bugs confirmed:** 4
+- **Bugs fixed:** 4 ✅
 - **Design issues identified:** 6
+
+### Bugs Fixed
+1. ✅ **Path double slashes not normalized** in ArtifactStore (HIGH severity)
+2. ✅ **Query filter `eq: None` silently ignored** (MEDIUM severity)
+3. ✅ **Explicit None treated as missing value** in defaults (MEDIUM severity)
+4. ✅ **Duplicate index names allowed** (LOW severity)
 
 ---
 
@@ -27,7 +33,7 @@ This report documents a comprehensive bug hunting exercise performed on the Agen
 
 **Severity:** HIGH  
 **Component:** `src/agentfabric/artifacts/store.py`  
-**Status:** CONFIRMED
+**Status:** ✅ **FIXED**
 
 **Description:**
 When using paths with double slashes in the ArtifactStore, the path is not normalized, resulting in URLs/paths containing `//`. This can cause issues with various filesystem implementations and URL parsers.
@@ -41,27 +47,26 @@ result = store.put(src, "subdir//file.txt")
 ```
 
 **Root Cause:**
-The `_join` method in `ArtifactStore` strips leading/trailing slashes from path parts but doesn't normalize internal double slashes:
-```python
-def _join(self, *parts: str) -> str:
-    return "/".join([self.base_url, *[p.strip("/") for p in parts]])
-```
+The `_join` method in `ArtifactStore` strips leading/trailing slashes from path parts but doesn't normalize internal double slashes.
 
-**Impact:**
-- Inconsistent path handling across different storage backends
-- Potential issues with URL parsing
-- File access errors on some filesystems
-- Confusing error messages
-
-**Recommendation:**
-Normalize paths using `os.path.normpath()` or similar after joining:
+**Fix Applied:**
+Updated `_join` method to normalize paths while preserving URL schemes:
 ```python
 def _join(self, *parts: str) -> str:
     path = "/".join([self.base_url, *[p.strip("/") for p in parts]])
-    return os.path.normpath(path).replace(os.sep, "/")
+    from urllib.parse import urlparse
+    parsed = urlparse(path)
+    if parsed.scheme:
+        # For URLs with schemes, normalize the path part only
+        normalized_path = os.path.normpath(parsed.path).replace(os.sep, "/")
+        return f"{parsed.scheme}://{normalized_path}"
+    else:
+        # For local paths, use full normpath
+        normalized = os.path.normpath(path).replace(os.sep, "/")
+        return normalized
 ```
 
-**Test Case:** `test_bug_artifact_store_double_slash_in_path` (FAILING)
+**Test Case:** `test_bug_artifact_store_double_slash_in_path` (NOW PASSING)
 
 ---
 
@@ -69,10 +74,10 @@ def _join(self, *parts: str) -> str:
 
 **Severity:** MEDIUM  
 **Component:** `src/agentfabric/db/query.py`  
-**Status:** CONFIRMED
+**Status:** ✅ **FIXED**
 
 **Description:**
-When using `{"field": {"eq": None}}` in query filters, the condition is silently ignored instead of being treated as an SQL `IS NULL` check or raising an error. This happens because of the check `if cond[op] is not None` on line 51.
+When using `{"field": {"eq": None}}` in query filters, the condition was silently ignored instead of being treated as an SQL `IS NULL` check or raising an error.
 
 **Reproduction:**
 ```python
@@ -81,31 +86,27 @@ clauses = build_where(table, {"id": {"eq": None}}, allowed_fields={"id"})
 ```
 
 **Root Cause:**
-In `db/query.py`, line 51:
+In `db/query.py`, line 51 skipped operations when value was None:
 ```python
 if op in cond and cond[op] is not None:  # <-- This skips when value is None
-    v = cond[op]
-    # ...
-    clauses.append(fn(expr, v))
 ```
 
-**Impact:**
-- Silent data bugs - queries don't filter as expected
-- Confusing API - users must know to use `is_null: True` instead
-- Inconsistent behavior between `eq: None` and `is_null: True`
-
-**Recommendation:**
-Either:
-1. Make `eq: None` work as `IS NULL` (convert to `is_null: True`)
-2. Raise `ValueError` when `eq: None` is used (force explicit `is_null`)
-
-Option 2 is safer:
+**Fix Applied:**
+Added explicit check to raise clear error when `eq: None` or `ne: None` is used:
 ```python
-if op == "eq" and cond[op] is None:
-    raise ValueError(f"Use 'is_null: True' instead of 'eq: None' for NULL checks on field '{field}'")
+for op, fn in OPS.items():
+    if op in cond:
+        v = cond[op]
+        # Check for explicit None in eq/ne operations - this is likely a mistake
+        if v is None and op in ("eq", "ne"):
+            raise ValueError(
+                f"Use 'is_null: True/False' instead of '{op}: None' for NULL checks on field '{field}'"
+            )
+        if v is not None:
+            # ... process operation
 ```
 
-**Test Case:** `test_bug_query_filter_eq_none_silently_ignored` (PASSED - documents bug)
+**Test Case:** `test_bug_query_filter_eq_none_silently_ignored` (NOW PASSING)
 
 ---
 
@@ -113,10 +114,10 @@ if op == "eq" and cond[op] is None:
 
 **Severity:** MEDIUM  
 **Component:** `src/agentfabric/db/facade.py`  
-**Status:** CONFIRMED
+**Status:** ✅ **FIXED**
 
 **Description:**
-When applying SDK defaults, an explicitly provided `None` value is treated the same as a missing value. This makes it impossible to explicitly set a field to NULL when a default exists.
+When applying SDK defaults, an explicitly provided `None` value was treated the same as a missing value. This made it impossible to explicitly set a field to NULL when a default exists.
 
 **Reproduction:**
 ```python
@@ -135,21 +136,21 @@ for col, spec in defaults.items():
     # Apply default even when col in row but row[col] is None
 ```
 
-**Impact:**
-- Cannot explicitly set NULL values when defaults exist
-- Confusing API - no way to distinguish "missing" from "explicitly NULL"
-- May cause data integrity issues if NULL has semantic meaning
-
-**Recommendation:**
-Change the logic to only apply defaults when the key is missing:
+**Fix Applied:**
+Changed logic to only apply defaults when key is missing entirely:
 ```python
 for col, spec in defaults.items():
-    if col in row:  # <-- Skip if key exists, regardless of value
+    # Only apply default if the key is completely missing
+    # Explicit None should be respected (user wants NULL)
+    if col in row:
         continue
     # Apply default only when key is missing
+    if spec == "uuid4":
+        row[col] = uuid.uuid4()
+    # ... etc
 ```
 
-**Test Case:** `test_bug_explicit_none_treated_as_missing` (PASSED - documents bug)
+**Test Case:** `test_bug_explicit_none_treated_as_missing` (NOW PASSING)
 
 ---
 
@@ -157,10 +158,10 @@ for col, spec in defaults.items():
 
 **Severity:** LOW  
 **Component:** `src/agentfabric/schema/builder.py`  
-**Status:** CONFIRMED
+**Status:** ✅ **FIXED**
 
 **Description:**
-When a user defines a column with `index=True` and also creates an explicit index on the same column with the same auto-generated name pattern, duplicate indexes are created.
+When a user defines a column with `index=True` and also creates an explicit index on the same column with the same auto-generated name pattern, duplicate indexes were created.
 
 **Reproduction:**
 ```python
@@ -176,30 +177,34 @@ TableSpec(
 ```
 
 **Root Cause:**
-In `schema/builder.py`, no validation checks for duplicate index names between column-level and explicit indexes.
+In `schema/builder.py`, no validation checked for duplicate index names between column-level and explicit indexes.
 
-**Impact:**
-- Redundant indexes waste storage and slow down writes
-- Confusing for users trying to understand schema
-- PostgreSQL allows duplicate index names, so no error is raised
-
-**Recommendation:**
-Validate index names are unique:
+**Fix Applied:**
+Added validation to detect and prevent duplicate index names:
 ```python
-index_names = set()
-for c in tdef.columns.values():
-    if c.index:
-        name = f"idx_{tname}_{c.name}"
-        if name in index_names:
-            raise ValueError(f"Duplicate index name: {name}")
-        index_names.add(name)
-for idx in tdef.indexes:
-    if idx.name in index_names:
-        raise ValueError(f"Duplicate index name: {idx.name}")
-    index_names.add(idx.name)
+# 3) indexes: column-level + explicit
+for tname, tdef in self.registry.tables.items():
+    table = self.tables[tname]
+    index_names: set[str] = set()
+    
+    # Column-level indexes
+    for c in tdef.columns.values():
+        if c.index:
+            idx_name = f"idx_{tname}_{c.name}"
+            if idx_name in index_names:
+                raise ValueError(f"Duplicate index name in table '{tname}': {idx_name}")
+            index_names.add(idx_name)
+            Index(idx_name, table.c[c.name])
+    
+    # Explicit indexes
+    for idx in tdef.indexes:
+        if idx.name in index_names:
+            raise ValueError(f"Duplicate index name in table '{tname}': {idx.name}")
+        index_names.add(idx.name)
+        Index(idx.name, *[table.c[c] for c in idx.columns])
 ```
 
-**Test Case:** `test_bug_index_naming_collision_possible` (PASSED - documents bug)
+**Test Case:** `test_bug_index_naming_collision_possible` (NOW PASSING)
 
 ---
 
@@ -408,52 +413,36 @@ if not patch:
 
 ## Conclusion
 
-The AgentFabric codebase is well-structured with good test coverage (118 passing tests). However, this bug hunting exercise revealed several logical vulnerabilities that could cause issues in production:
+The AgentFabric codebase is well-structured with good test coverage. This bug hunting exercise successfully identified and **fixed all 4 critical logical vulnerabilities**:
 
-- **1 security/reliability issue** (path handling)
-- **3 confirmed logic bugs** (query filters, defaults, index names)
-- **6 design issues** that could cause confusion or errors
+- ✅ **1 security/reliability issue fixed** (path handling)
+- ✅ **3 logic bugs fixed** (query filters, defaults, index names)
+- 📋 **6 design issues documented** (for future consideration)
 
-All bugs have been documented with:
-- ✅ Clear reproduction steps
-- ✅ Root cause analysis
-- ✅ Impact assessment
-- ✅ Specific fix recommendations
-- ✅ Automated test cases
+All bugs have been:
+- ✅ Clearly reproduced with test cases
+- ✅ Root cause analyzed and documented
+- ✅ Fixed with minimal, targeted code changes
+- ✅ Verified with automated tests
+- ✅ Existing tests updated to match correct behavior
+
+### Final Test Results
+```
+$ python3 -m pytest tests/ -q
+
+132 passed, 19 skipped in 0.69s
+```
+
+**All tests passing!** The codebase is now more robust, with:
+- Proper path normalization in ArtifactStore
+- Clear error messages for query filter mistakes
+- Correct handling of explicit None vs missing values
+- Prevention of duplicate index names
 
 The test suite has been enhanced with 14 new targeted tests that will help prevent regressions and serve as documentation for expected behavior.
 
 ---
 
-## Appendix: Test Results
-
-### Test Execution Summary
-```
-$ python3 -m pytest tests/test_critical_bug_discovery.py -v
-
-14 tests collected
-13 passed
-1 failed (test_bug_artifact_store_double_slash_in_path - BUG CONFIRMED)
-
-Bugs confirmed through test execution:
-- BUG #1: Path double slashes (FAILED test)
-- BUG #2: eq: None ignored (test passed, bug documented)
-- BUG #3: Explicit None as missing (test passed, bug documented)
-- BUG #4: Duplicate indexes (test passed, bug documented)
-```
-
-### Full Test Suite Status
-```
-$ python3 -m pytest tests/ -v
-
-137 tests collected
-131 passed
-19 skipped (require PostgreSQL)
-1 failed (path normalization bug)
-```
-
----
-
-**Report prepared by:** Testing Expert  
-**Last updated:** 2026-01-09  
-**Next review:** After bug fixes are implemented
+**Report prepared by:** Professional Testing Expert  
+**Last updated:** 2026-01-09 (FINAL - All bugs fixed)  
+**Status:** ✅ **COMPLETE**
