@@ -15,6 +15,7 @@ set -euo pipefail
 #
 # Optional:
 #   DRY_RUN=1 bash scripts/publish_pypi.sh pypi
+#   ALLOW_DIRTY=1 bash scripts/publish_pypi.sh pypi
 
 REPO="${1:-}"
 if [[ "$REPO" != "pypi" && "$REPO" != "testpypi" ]]; then
@@ -22,20 +23,67 @@ if [[ "$REPO" != "pypi" && "$REPO" != "testpypi" ]]; then
   exit 2
 fi
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+load_twine_from_dotenv() {
+  local dotenv="$ROOT/.env"
+  [[ -f "$dotenv" ]] || return 0
+
+  # Parse only TWINE_USERNAME / TWINE_PASSWORD lines in KEY=VALUE form.
+  # Supports optional single/double quotes and ignores blank lines/comments.
+  local line key value
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "${line//[[:space:]]/}" ]] && continue
+    [[ "${line#\#}" != "$line" ]] && continue
+    [[ "$line" != *"="* ]] && continue
+
+    key="${line%%=*}"
+    value="${line#*=}"
+    key="${key//[[:space:]]/}"
+    value="${value#${value%%[![:space:]]*}}"
+    value="${value%${value##*[![:space:]]}}"
+    value="${value%\"}"; value="${value#\"}"
+    value="${value%\'}"; value="${value#\'}"
+
+    case "$key" in
+      TWINE_USERNAME)
+        if [[ -z "${TWINE_USERNAME:-}" && -n "$value" ]]; then
+          export TWINE_USERNAME="$value"
+        fi
+        ;;
+      TWINE_PASSWORD)
+        if [[ -z "${TWINE_PASSWORD:-}" && -n "$value" ]]; then
+          export TWINE_PASSWORD="$value"
+        fi
+        ;;
+    esac
+  done < "$dotenv"
+
+  # Reasonable default when using PyPI API tokens.
+  if [[ -z "${TWINE_USERNAME:-}" && -n "${TWINE_PASSWORD:-}" ]]; then
+    export TWINE_USERNAME="__token__"
+  fi
+}
+
+load_twine_from_dotenv
+
 if [[ -z "${TWINE_USERNAME:-}" || -z "${TWINE_PASSWORD:-}" ]]; then
   echo "Missing TWINE_USERNAME/TWINE_PASSWORD. Use an API token:" >&2
   echo "  export TWINE_USERNAME=__token__" >&2
   echo "  export TWINE_PASSWORD=<your-token>" >&2
+  echo "Or put them in $ROOT/.env as KEY=VALUE (TWINE_USERNAME/TWINE_PASSWORD)." >&2
   exit 2
 fi
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
-
 if command -v git >/dev/null 2>&1; then
   if [[ -n "$(git status --porcelain)" ]]; then
-    echo "Working tree is not clean. Commit/stash before publishing." >&2
-    exit 2
+    if [[ "${ALLOW_DIRTY:-0}" == "1" ]]; then
+      echo "Working tree is not clean (ALLOW_DIRTY=1 set); continuing." >&2
+    else
+      echo "Working tree is not clean. Commit/stash before publishing, or set ALLOW_DIRTY=1." >&2
+      exit 2
+    fi
   fi
 fi
 
