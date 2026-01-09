@@ -1,0 +1,150 @@
+version: 1
+postgres_schema: acebench
+
+tables:
+  ace_instance:
+    description: ACE-Bench instance table (composite PK)
+    primary_key: [instance_id, gold_patch_cov]
+    columns:
+      instance_id:
+        type: text
+        nullable: false
+        index: true
+        filterable: true
+      gold_patch_cov:
+        type: float
+        nullable: false
+        index: true
+        filterable: true
+
+      gold_patch_url:
+        type: text
+        nullable: true
+        filterable: true
+      test_patch_url:
+        type: text
+        nullable: true
+        filterable: true
+
+      f2p:
+        type: list
+        item_type: text
+        nullable: true
+        filterable: true
+      p2p:
+        type: list
+        item_type: text
+        nullable: true
+        filterable: true
+
+      image_name:
+        type: text
+        nullable: true
+        index: true
+        filterable: true
+
+      repo:
+        type: text
+        nullable: true
+        index: true
+        filterable: true
+      commit:
+        type: text
+        nullable: true
+        index: true
+        filterable: true
+      prd_url:
+        type: text
+        nullable: true
+        filterable: true
+
+      repo_setting:
+        type: json
+        nullable: true
+
+      base_pass_rate:
+        type: float
+        nullable: true
+        filterable: true
+
+      lines:
+        type: int
+        nullable: true
+        filterable: true
+      test_count:
+        type: int
+        nullable: true
+        filterable: true
+
+      commit_time:
+        type: datetime
+        nullable: true
+        filterable: true
+      create_time:
+        type: datetime
+        nullable: false
+        default: now
+        filterable: true
+      end_time_data:
+        type: datetime
+        nullable: true
+        filterable: true
+
+  ace_traj:
+    description: ACE-Bench traj table (FK -> ace_instance)
+    primary_key: [agent, model, instance_id, attempt, gold_patch_cov]
+    columns:
+      instance_id:
+        type: text
+        nullable: false
+        index: true
+        filterable: true
+      gold_patch_cov:
+        type: float
+        nullable: false
+        index: true
+        filterable: true
+
+      agent:
+        type: text
+        nullable: false
+        index: true
+        filterable: true
+      model:
+        type: text
+        nullable: false
+        index: true
+        filterable: true
+
+      patch_url:
+        type: text
+        nullable: true
+        filterable: true
+      traj_url:
+        type: text
+        nullable: true
+        filterable: true
+
+      attempt:
+        type: int
+        nullable: false
+        filterable: true
+
+      metric:
+        type: json
+        nullable: true
+
+      end_time_infer:
+        type: datetime
+        nullable: true
+        filterable: true
+      end_time_harness:
+        type: datetime
+        nullable: true
+        filterable: true
+
+    foreign_keys:
+      - columns: [instance_id, gold_patch_cov]
+        ref_table: ace_instance
+        ref_columns: [instance_id, gold_patch_cov]
+        on_delete: restrict

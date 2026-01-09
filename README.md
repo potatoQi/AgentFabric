@@ -1,0 +1,7 @@
+# agentfabric
+
+Config-driven database component for agent pipelines.
+
+Usage docs: [docs/README.md](docs/README.md)
+
+Design notes: [DESIGN.md](DESIGN.md)
