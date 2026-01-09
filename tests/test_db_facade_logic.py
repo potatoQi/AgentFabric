@@ -56,7 +56,7 @@ def test_db_precomputes_defaults_and_filterable_cols_without_connecting(db: DB) 
 
 def test_apply_sdk_defaults_row_fills_uuid_now_and_literal(db: DB) -> None:
 
-    row = {"id": None}  # missing created_at/msg
+    row = {}  # missing all fields - defaults should apply
     out = db._apply_sdk_defaults_row("t", row)
 
     assert isinstance(out["id"], UUID)

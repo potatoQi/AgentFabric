@@ -57,10 +57,22 @@ class SchemaBuilder:
         # 3) indexes: column-level + explicit
         for tname, tdef in self.registry.tables.items():
             table = self.tables[tname]
+            index_names: set[str] = set()
+            
+            # Column-level indexes
             for c in tdef.columns.values():
                 if c.index:
-                    Index(f"idx_{tname}_{c.name}", table.c[c.name])
+                    idx_name = f"idx_{tname}_{c.name}"
+                    if idx_name in index_names:
+                        raise ValueError(f"Duplicate index name in table '{tname}': {idx_name}")
+                    index_names.add(idx_name)
+                    Index(idx_name, table.c[c.name])
+            
+            # Explicit indexes
             for idx in tdef.indexes:
+                if idx.name in index_names:
+                    raise ValueError(f"Duplicate index name in table '{tname}': {idx.name}")
+                index_names.add(idx.name)
                 Index(idx.name, *[table.c[c] for c in idx.columns])
 
         return self.metadata, self.tables

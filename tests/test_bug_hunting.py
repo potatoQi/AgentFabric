@@ -97,7 +97,10 @@ def test_bug_hunt_duplicate_column_names_case_sensitivity():
 
 
 def test_bug_hunt_default_value_with_explicit_none():
-    """Test if explicitly passing None overrides defaults."""
+    """Test if explicitly passing None overrides defaults.
+    
+    UPDATED: After bug fix, explicit None is now preserved (not replaced with default).
+    """
     cfg = ConfigSpec(
         tables={
             "t": TableSpec(
@@ -111,14 +114,13 @@ def test_bug_hunt_default_value_with_explicit_none():
     )
     db = DB(url="postgresql+psycopg://u:p@localhost:5432/db", config=cfg)
 
-    # BUG CANDIDATE: Does explicit None override default or not?
+    # BUG FIX: Explicit None is now preserved
     row = {"id": None, "msg": None}
     out = db._apply_sdk_defaults_row("t", row)
 
-    # Current behavior: None is treated as "missing" and default is applied
-    # This might be a bug - explicit None should perhaps be respected
-    assert out["id"] is not None  # Default applied
-    assert out["msg"] == "Hello"  # Default applied - is this correct?
+    # After fix: Explicit None is preserved
+    assert out["id"] is None  # Explicit None preserved
+    assert out["msg"] is None  # Explicit None preserved
 
 
 def test_bug_hunt_default_value_mutation_between_calls():
@@ -235,7 +237,10 @@ def test_bug_hunt_query_filter_with_empty_where():
 
 
 def test_bug_hunt_query_filter_with_none_values():
-    """Test query filter handling of None values in conditions."""
+    """Test query filter handling of None values in conditions.
+    
+    UPDATED: After bug fix, eq: None now raises clear error.
+    """
     from sqlalchemy import Column, Integer, MetaData, String, Table
     from sqlalchemy.dialects.postgresql import JSONB
 
@@ -248,15 +253,13 @@ def test_bug_hunt_query_filter_with_none_values():
         Column("extra", JSONB, nullable=False),
     )
 
-    # BUG CANDIDATE: What happens with None values in operations?
-    clauses = build_where(
-        t,
-        {"id": {"eq": None}},  # Comparing with None
-        allowed_fields={"id"},
-    )
-    # This might silently skip the clause instead of using IS NULL
-    # Check the actual behavior
-    assert len(clauses) >= 0  # Should handle this somehow
+    # BUG FIX: eq: None now raises an error instead of being silently skipped
+    with pytest.raises(ValueError, match="Use 'is_null: True/False' instead"):
+        build_where(
+            t,
+            {"id": {"eq": None}},  # Now raises error
+            allowed_fields={"id"},
+        )
 
 
 def test_bug_hunt_query_filter_multiple_is_null():

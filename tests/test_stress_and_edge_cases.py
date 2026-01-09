@@ -274,10 +274,10 @@ def test_boundary_empty_string_vs_none():
     assert row1["id"] == ""  # Empty string preserved
     assert row1["name"] == ""  # Empty string preserved
 
-    # None should trigger default
+    # Explicit None should now be preserved (UPDATED)
     row2 = db._apply_sdk_defaults_row("t", {"id": None, "name": None})
-    assert row2["id"] == "default_id"
-    assert row2["name"] == "default_name"
+    assert row2["id"] is None  # Explicit None preserved
+    assert row2["name"] is None  # Explicit None preserved
 
 
 # ============================================================================
@@ -333,9 +333,9 @@ def test_boundary_false_vs_none():
     row1 = db._apply_sdk_defaults_row("t", {"id": "1", "active": False})
     assert row1["active"] is False  # False preserved
 
-    # None should trigger default
+    # Explicit None should now be preserved (UPDATED)
     row2 = db._apply_sdk_defaults_row("t", {"id": "2", "active": None})
-    assert row2["active"] is True  # Default applied
+    assert row2["active"] is None  # Explicit None preserved
 
 
 # ============================================================================

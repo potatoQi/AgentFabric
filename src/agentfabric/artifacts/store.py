@@ -23,7 +23,19 @@ class ArtifactStore:
         self.base_url = base_url.rstrip("/")
 
     def _join(self, *parts: str) -> str:
-        return "/".join([self.base_url, *[p.strip("/") for p in parts]])
+        path = "/".join([self.base_url, *[p.strip("/") for p in parts]])
+        # Normalize to remove double slashes while preserving URL schemes
+        # Check if it starts with a scheme (e.g., file://, s3://)
+        from urllib.parse import urlparse
+        parsed = urlparse(path)
+        if parsed.scheme:
+            # For URLs with schemes, normalize the path part only
+            normalized_path = os.path.normpath(parsed.path).replace(os.sep, "/")
+            return f"{parsed.scheme}://{normalized_path}"
+        else:
+            # For local paths, use full normpath
+            normalized = os.path.normpath(path).replace(os.sep, "/")
+            return normalized
 
     def _is_absolute_target(self, target: str) -> bool:
         parsed = urlparse(target)

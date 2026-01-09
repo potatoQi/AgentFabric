@@ -164,10 +164,9 @@ def test_potential_bug_artifact_store_directory_traversal(tmp_path: Path):
 
 
 def test_potential_bug_explicit_none_vs_missing_value():
-    """AMBIGUITY: Is explicit None the same as missing value for defaults?
-
-    Current behavior: explicit None is treated same as missing value.
-    Question: Should explicit None mean "set to NULL" instead?
+    """Test handling of explicit None vs missing value for defaults.
+    
+    UPDATED: After bug fix, explicit None is preserved instead of applying defaults.
     """
     cfg = ConfigSpec(
         tables={
@@ -189,16 +188,13 @@ def test_potential_bug_explicit_none_vs_missing_value():
     assert row1["name"] == "DefaultName"
     assert row1["count"] == 0
 
-    # Case 2: Explicit None - what should happen?
+    # Case 2: Explicit None - now preserved (FIXED)
     row2 = db._apply_sdk_defaults_row("t", {"id": None, "name": None, "count": None})
 
-    # Current behavior: defaults are applied even for explicit None
-    assert isinstance(row2["id"], UUID)  # Default applied
-    assert row2["name"] == "DefaultName"  # Default applied
-    assert row2["count"] == 0  # Default applied
-
-    # Question: Should explicit None set the value to NULL instead?
-    # This is potentially a design issue - the behavior is unclear
+    # After fix: explicit None is preserved
+    assert row2["id"] is None  # Explicit None preserved
+    assert row2["name"] is None  # Explicit None preserved
+    assert row2["count"] is None  # Explicit None preserved
 
 
 # ============================================================================
@@ -207,7 +203,10 @@ def test_potential_bug_explicit_none_vs_missing_value():
 
 
 def test_potential_bug_query_filter_eq_none():
-    """Test how query filter handles eq: None vs is_null: True."""
+    """Test how query filter handles eq: None vs is_null: True.
+    
+    UPDATED: After bug fix, eq: None now raises clear error.
+    """
     from sqlalchemy import Column, Integer, MetaData, Table
     from sqlalchemy.dialects.postgresql import JSONB
 
@@ -221,18 +220,13 @@ def test_potential_bug_query_filter_eq_none():
         Column("extra", JSONB, nullable=False),
     )
 
-    # Using eq: None - what should this do?
-    clauses1 = build_where(t, {"id": {"eq": None}}, allowed_fields={"id"})
+    # BUG FIX: eq: None now raises an error
+    with pytest.raises(ValueError, match="Use 'is_null: True/False' instead"):
+        build_where(t, {"id": {"eq": None}}, allowed_fields={"id"})
 
-    # Using is_null: True - explicit NULL check
+    # Using is_null: True - explicit NULL check (correct way)
     clauses2 = build_where(t, {"id": {"is_null": True}}, allowed_fields={"id"})
-
-    # Are these different?
-    print(f"eq: None produces {len(clauses1)} clauses")
-    print(f"is_null: True produces {len(clauses2)} clauses")
-
-    # The eq: None might be silently skipped (because cond[op] is not None check)
-    # This could be confusing behavior
+    assert len(clauses2) == 1
 
 
 # ============================================================================

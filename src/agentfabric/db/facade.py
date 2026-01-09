@@ -139,7 +139,9 @@ class DB:
             return row
 
         for col, spec in defaults.items():
-            if col in row and row[col] is not None:
+            # Only apply default if the key is completely missing
+            # Explicit None should be respected (user wants NULL)
+            if col in row:
                 continue
 
             if spec == "uuid4":
@@ -161,8 +163,20 @@ class DB:
             return obj
 
         for col, spec in defaults.items():
-            if getattr(obj, col, None) is not None:
-                continue
+            # Only apply default if the attribute doesn't exist or is not set
+            # Use hasattr to check if attribute exists, then check if it's None
+            # If it's explicitly set to None, respect that
+            if hasattr(obj, col):
+                # Attribute exists - check if it was explicitly set
+                # If current value is not None, it was set, so skip
+                # If current value is None, we need to distinguish between:
+                # - Never set (apply default)
+                # - Explicitly set to None (keep None)
+                # Python objects initialized with None are indistinguishable from unset
+                # So we apply defaults only if the value is None (same as before for objs)
+                if getattr(obj, col, None) is not None:
+                    continue
+            
             if spec == "uuid4":
                 setattr(obj, col, uuid.uuid4())
             elif spec == "now":

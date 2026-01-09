@@ -48,13 +48,19 @@ def build_where(table, where: dict[str, Any], *, allowed_fields: set[str] | None
             clauses.append(expr.is_not(None))
 
         for op, fn in OPS.items():
-            if op in cond and cond[op] is not None:
+            if op in cond:
                 v = cond[op]
-                if op in ("in_", "nin") and isinstance(v, list) and len(v) == 0:
-                    # in_ [] => empty result set; nin [] => no-op
-                    if op == "in_":
-                        clauses.append(False)
-                    continue
-                clauses.append(fn(expr, v))
+                # Check for explicit None in eq/ne operations - this is likely a mistake
+                if v is None and op in ("eq", "ne"):
+                    raise ValueError(
+                        f"Use 'is_null: True/False' instead of '{op}: None' for NULL checks on field '{field}'"
+                    )
+                if v is not None:
+                    if op in ("in_", "nin") and isinstance(v, list) and len(v) == 0:
+                        # in_ [] => empty result set; nin [] => no-op
+                        if op == "in_":
+                            clauses.append(False)
+                        continue
+                    clauses.append(fn(expr, v))
 
     return clauses

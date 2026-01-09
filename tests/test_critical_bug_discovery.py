@@ -65,14 +65,13 @@ def test_bug_upsert_missing_conflict_column_value():
 
 def test_bug_query_filter_eq_none_silently_ignored():
     """
-    BUG: Using eq: None in query filter is silently ignored.
+    BUG FIXED: Using eq: None in query filter now raises clear error.
     
-    When using {"field": {"eq": None}}, the condition is skipped because
-    of the check `if cond[op] is not None` in query.py line 51.
-    This means eq: None is ignored instead of being treated as IS NULL.
+    Previously: {"field": {"eq": None}} was silently ignored
+    Now: Raises ValueError directing user to use is_null instead
     
-    Expected: Should either use IS NULL or raise error
-    Actual: Condition is silently ignored
+    Expected: Should raise ValueError with clear message
+    Actual: Raises ValueError (FIXED!)
     """
     from sqlalchemy import Column, Integer, MetaData, Table
     from sqlalchemy.dialects.postgresql import JSONB
@@ -85,17 +84,13 @@ def test_bug_query_filter_eq_none_silently_ignored():
         Column("extra", JSONB, nullable=False),
     )
 
-    # eq: None - this should either work or raise an error
-    clauses1 = build_where(t, {"id": {"eq": None}}, allowed_fields={"id"})
+    # eq: None should now raise an error
+    with pytest.raises(ValueError, match="Use 'is_null: True/False' instead"):
+        build_where(t, {"id": {"eq": None}}, allowed_fields={"id"})
     
     # is_null: True - this is the correct way
     clauses2 = build_where(t, {"id": {"is_null": True}}, allowed_fields={"id"})
-    
-    # BUG: eq: None produces 0 clauses (silently ignored)
-    assert len(clauses1) == 0, "BUG FOUND: eq: None is silently ignored"
     assert len(clauses2) == 1, "is_null: True works correctly"
-    
-    # This is confusing behavior - eq: None should either work or raise error
 
 
 # ============================================================================
@@ -105,14 +100,13 @@ def test_bug_query_filter_eq_none_silently_ignored():
 
 def test_bug_explicit_none_treated_as_missing():
     """
-    BUG: Explicit None is treated the same as missing value for defaults.
+    BUG FIXED: Explicit None now respected as NULL intent in dict-based rows.
     
-    When a user explicitly sets a field to None, it's treated the same as
-    not providing the field at all. This means defaults are applied even
-    when the user explicitly wants NULL.
+    Previously: Explicit None was treated same as missing value
+    Now: Explicit None in dict keeps None (respects NULL intent)
     
-    Expected: Explicit None should mean "set to NULL"
-    Actual: Explicit None triggers default value application
+    Note: For ORM objects, this distinction is harder because Python
+    object attributes initialized to None look the same as unset.
     """
     cfg = ConfigSpec(
         tables={
@@ -133,14 +127,12 @@ def test_bug_explicit_none_treated_as_missing():
     assert row1["name"] == "DefaultName"
     assert row1["status"] == "active"
     
-    # Case 2: Explicit None - should this apply defaults or respect NULL?
+    # Case 2: Explicit None - should now respect NULL (FIXED!)
     row2 = db._apply_sdk_defaults_row("items", {"name": None, "status": None})
     
-    # BUG: Defaults are applied even for explicit None
-    assert row2["name"] == "DefaultName", "BUG FOUND: Explicit None is treated as missing"
-    assert row2["status"] == "active", "BUG FOUND: Explicit None is treated as missing"
-    
-    # This makes it impossible to explicitly set NULL when a default exists
+    # FIXED: Explicit None is now preserved
+    assert row2["name"] is None, "Explicit None should be preserved"
+    assert row2["status"] is None, "Explicit None should be preserved"
 
 
 # ============================================================================
@@ -397,13 +389,13 @@ def test_bug_orm_base_counter_increments():
 
 def test_bug_index_naming_collision_possible():
     """
-    BUG: Column-level indexes use predictable names that could collide.
+    BUG FIXED: Duplicate index names now cause validation error.
     
-    The index naming pattern idx_{table}_{column} could collide with
-    explicit indexes if not careful.
+    Previously: Column-level index and explicit index could have same name
+    Now: Duplicate index names raise ValueError during schema building
     
     Expected: Should validate index names are unique
-    Actual: Collision could occur
+    Actual: Raises ValueError (FIXED!)
     """
     cfg = ConfigSpec(
         tables={
@@ -421,15 +413,9 @@ def test_bug_index_naming_collision_possible():
         }
     )
     
-    db = DB(url="postgresql+psycopg://u:p@localhost:5432/db", config=cfg)
-    
-    # Both indexes will be created (redundant)
-    # This could cause confusion but isn't necessarily an error
-    t = db.tables["users"]
-    idx_names = [idx.name for idx in t.indexes]
-    
-    # Will have duplicate index names
-    assert idx_names.count("idx_users_name") == 2, "BUG FOUND: Duplicate index names"
+    # This now raises an error (FIXED!)
+    with pytest.raises(ValueError, match="Duplicate index name"):
+        DB(url="postgresql+psycopg://u:p@localhost:5432/db", config=cfg)
 
 
 # ============================================================================
