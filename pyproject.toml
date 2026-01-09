@@ -13,7 +13,12 @@ dependencies = [
   "PyYAML>=6.0",
   "fsspec>=2024.3.0",
   "psycopg[binary]>=3.1",
+  "streamlit>=1.33",
+  "pandas>=2.0",
 ]
+
+[project.scripts]
+agentfabric = "agentfabric.cli:main"
 
 [project.urls]
 Homepage = "https://example.invalid/agentfabric"

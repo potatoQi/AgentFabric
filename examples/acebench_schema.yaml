@@ -1,4 +1,6 @@
 version: 1
+db_url: postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME
+artifact_base_url: file:///tmp/agentfabric-artifacts
 postgres_schema: acebench
 
 tables:
@@ -54,6 +56,15 @@ tables:
         index: true
         filterable: true
       prd_url:
+        type: text
+        nullable: true
+        filterable: true
+
+      json_url:
+        type: text
+        nullable: true
+        filterable: true
+      md_url:
         type: text
         nullable: true
         filterable: true

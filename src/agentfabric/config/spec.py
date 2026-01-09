@@ -90,11 +90,17 @@ class TableSpec(BaseModel):
 
 class ConfigSpec(BaseModel):
     version: int = 1
+    db_url: str | None = None
+    artifact_base_url: str | None = None
     postgres_schema: str | None = None
     tables: dict[str, TableSpec]
 
     @model_validator(mode="after")
     def _validate_table_names(self):
+        if isinstance(self.db_url, str) and self.db_url.strip() == "":
+            self.db_url = None
+        if isinstance(self.artifact_base_url, str) and self.artifact_base_url.strip() == "":
+            self.artifact_base_url = None
         for tname in self.tables.keys():
             if not isinstance(tname, str) or tname.strip() == "":
                 raise ValueError("table name cannot be empty")

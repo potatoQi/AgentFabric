@@ -6,9 +6,10 @@ from typing import Any
 from uuid import UUID as PyUUID
 import uuid
 
-from sqlalchemy import create_engine, select, update
+from sqlalchemy import and_, create_engine, delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql import tuple_
 
 from agentfabric.config.spec import ConfigSpec
 from agentfabric.schema.builder import SchemaBuilder
@@ -21,14 +22,11 @@ from .query import build_where
 class DB:
     def __init__(
         self,
-        url: str,
+        url: str | None = None,
         *,
         config: ConfigSpec | None = None,
         config_path: str | None = None,
     ):
-        if not url:
-            raise ValueError("provide url")
-
         if (config is None) == (config_path is None):
             raise ValueError("provide exactly one of config or config_path")
 
@@ -36,6 +34,11 @@ class DB:
             from agentfabric.config.loader import load_config
 
             config = load_config(config_path)  # type: ignore[arg-type]
+
+        if url is None or str(url).strip() == "":
+            url = config.db_url
+        if not url:
+            raise ValueError("provide url (or set db_url in config)")
 
         self.config = config
         self.registry = SchemaRegistry.from_config(config)
@@ -109,6 +112,23 @@ class DB:
             s.commit()
             return int(res.rowcount or 0)
 
+    def delete_where(self, table: str, where: dict) -> int:
+        """Delete rows matching a filter DSL `where`.
+
+        Safety: requires a non-empty `where` (prevents accidental full-table deletes).
+        """
+
+        t = self.tables[table]
+        clauses = build_where(t, where, allowed_fields=self._filterable_cols.get(table))
+        if not clauses:
+            raise ValueError("delete_where requires non-empty where")
+
+        stmt = delete(t).where(and_(*clauses))
+        with self.Session() as s:
+            res = s.execute(stmt)
+            s.commit()
+            return int(res.rowcount or 0)
+
     def upsert(self, table: str, obj: Any, *, conflict_cols: list[str] | None = None) -> Any:
         # Optional convenience: keeps idempotency without exposing Session.
         t = self.tables[table]
@@ -132,6 +152,46 @@ class DB:
         # rehydrate an ORM instance
         model = self.models[table]
         return model(**dict(out))
+
+    def delete_by_pk(self, table: str, rows: list[dict[str, Any]]) -> int:
+        """Delete rows by primary key values.
+
+        Designed for UIs/tools: it prevents accidental full-table deletes by requiring
+        PK columns and a non-empty row list.
+        """
+
+        if not rows:
+            return 0
+
+        pk_cols = list(self.registry.tables[table].primary_key)
+        if not pk_cols:
+            raise ValueError("no primary key defined")
+
+        t = self.tables[table]
+        for c in pk_cols:
+            if c not in t.c:
+                raise ValueError(f"primary key column not found in table: {c}")
+
+        # Build a tuple IN for composite PKs; for single PK, this is still fine.
+        cols = [t.c[c] for c in pk_cols]
+        keys: list[tuple[Any, ...]] = []
+        for r in rows:
+            keys.append(tuple(r.get(c) for c in pk_cols))
+
+        # Filter out incomplete keys.
+        keys = [k for k in keys if all(v is not None for v in k)]
+        if not keys:
+            raise ValueError("no complete primary key values provided")
+
+        if len(cols) == 1:
+            stmt = delete(t).where(cols[0].in_([k[0] for k in keys]))
+        else:
+            stmt = delete(t).where(tuple_(*cols).in_(keys))
+
+        with self.Session() as s:
+            res = s.execute(stmt)
+            s.commit()
+            return int(res.rowcount or 0)
 
     def _apply_sdk_defaults_row(self, table: str, row: dict[str, Any]) -> dict[str, Any]:
         defaults = self._defaults.get(table)

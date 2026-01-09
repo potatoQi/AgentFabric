@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import String, cast
+from sqlalchemy import String, and_, cast, or_
 
 
 OPS = {
@@ -54,9 +54,11 @@ def _split_extra_path(path: str) -> list[str]:
     return parts
 
 
-def build_where(table, where: dict[str, Any], *, allowed_fields: set[str] | None = None) -> list:
-    clauses = []
+def _build_field_clauses(table, where: dict[str, Any], *, allowed_fields: set[str] | None = None) -> list:
+    clauses: list[Any] = []
     for field, cond in where.items():
+        if field in {"and", "or"}:
+            raise ValueError("'and'/'or' are not valid field names")
         if not isinstance(cond, dict):
             raise TypeError(f"where['{field}'] must be a dict of ops")
 
@@ -103,3 +105,57 @@ def build_where(table, where: dict[str, Any], *, allowed_fields: set[str] | None
                 clauses.append(fn(expr, v))
 
     return clauses
+
+
+def build_where(table, where: dict[str, Any], *, allowed_fields: set[str] | None = None) -> list:
+    """Build SQLAlchemy WHERE clauses from the AgentFabric filter DSL.
+
+    Supports two shapes:
+
+    1) Field map (legacy):
+       {"col": {"eq": 1, "lt": 3}, "extra.tag": {"like": "d%"}}
+
+    2) Boolean composition (new):
+       {"and": [ {"col": {"eq": 1}}, {"col": {"gt": 0}}, {"other": {"ne": "x"}} ]}
+       {"or":  [ {...}, {...} ]}
+
+    The new form enables multiple independent constraints on the same field.
+    """
+
+    if not where:
+        return []
+
+    if "and" in where or "or" in where:
+        clauses: list[Any] = []
+
+        # Allow mixing a top-level field map with boolean groups.
+        field_map = {k: v for k, v in where.items() if k not in {"and", "or"}}
+        if field_map:
+            clauses.extend(_build_field_clauses(table, field_map, allowed_fields=allowed_fields))
+
+        if "and" in where:
+            items = where.get("and")
+            if not isinstance(items, list):
+                raise TypeError("where['and'] must be a list")
+            for item in items:
+                if not isinstance(item, dict):
+                    raise TypeError("where['and'] items must be dicts")
+                clauses.extend(build_where(table, item, allowed_fields=allowed_fields))
+
+        if "or" in where:
+            items = where.get("or")
+            if not isinstance(items, list):
+                raise TypeError("where['or'] must be a list")
+            or_parts: list[Any] = []
+            for item in items:
+                if not isinstance(item, dict):
+                    raise TypeError("where['or'] items must be dicts")
+                part = build_where(table, item, allowed_fields=allowed_fields)
+                if part:
+                    or_parts.append(and_(*part))
+            if or_parts:
+                clauses.append(or_(*or_parts))
+
+        return clauses
+
+    return _build_field_clauses(table, where, allowed_fields=allowed_fields)

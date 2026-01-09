@@ -141,3 +141,29 @@ def test_build_where_extra_nin_empty_list_is_noop() -> None:
     t = _table()
     clauses = build_where(t, {"extra.tag": {"nin": []}})
     assert clauses == []
+
+
+def test_build_where_and_group_allows_multiple_constraints_same_field() -> None:
+    t = _table()
+    clauses = build_where(
+        t,
+        {
+            "and": [
+                {"attempt": {"gte": 0}},
+                {"attempt": {"lt": 3}},
+                {"attempt": {"ne": 2}},
+            ]
+        },
+        allowed_fields={"attempt"},
+    )
+    assert len(clauses) == 3
+
+
+def test_build_where_or_group_builds_single_or_clause() -> None:
+    t = _table()
+    clauses = build_where(
+        t,
+        {"or": [{"attempt": {"eq": 1}}, {"attempt": {"eq": 2}}]},
+        allowed_fields={"attempt"},
+    )
+    assert len(clauses) == 1

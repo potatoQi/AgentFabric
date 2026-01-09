@@ -12,6 +12,7 @@ from agentfabric.config.spec import ColumnSpec, ConfigSpec, TableSpec
 
 def _cfg() -> ConfigSpec:
     return ConfigSpec(
+        db_url="postgresql+psycopg://u:p@localhost:5432/db",
         postgres_schema="s",
         tables={
             "t": TableSpec(
@@ -34,12 +35,38 @@ def _cfg() -> ConfigSpec:
 @pytest.fixture(scope="module")
 def db() -> DB:
     # Create once to avoid repeated dynamic ORM class registration warnings.
-    return DB(url="postgresql+psycopg://u:p@localhost:5432/db", config=_cfg())
+    return DB(config=_cfg())
+
+
+def test_db_infers_url_from_config_path(tmp_path):
+    p = tmp_path / "cfg.yaml"
+    p.write_text(
+        """
+version: 1
+db_url: postgresql+psycopg://u:p@localhost:5432/db
+postgres_schema: s
+
+tables:
+  t:
+    primary_key: [id]
+    columns:
+      id: {type: text, nullable: false, filterable: true}
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    db2 = DB(config_path=str(p))
+    assert db2.engine.url.drivername.startswith("postgresql")
 
 
 def test_db_init_argument_validation() -> None:
+    cfg_no_url = _cfg().model_copy(update={"db_url": None})
+
     with pytest.raises(ValueError, match="provide url"):
-        DB(url="", config=_cfg())
+        DB(url="", config=cfg_no_url)
+
+    with pytest.raises(ValueError, match="provide url"):
+        DB(url=None, config=cfg_no_url)
 
     with pytest.raises(ValueError, match="exactly one of config or config_path"):
         DB(url="postgresql+psycopg://u:p@localhost:5432/db", config=_cfg(), config_path="x.yaml")
