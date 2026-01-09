@@ -65,6 +65,8 @@ class TableSpec(BaseModel):
 
 key 是列名；value 是 `ColumnSpec`。
 
+注意：`extra` 是保留列名。AgentFabric 会为每个表自动添加一个 `extra` JSONB 列，因此配置中禁止定义名为 `extra`（大小写不敏感）的列。
+
 ## 列：`ColumnSpec`
 
 ```python
@@ -110,6 +112,11 @@ class IndexSpec(BaseModel):
     name: str
     columns: list[str]
 ```
+
+校验规则：
+
+- `name` 不能为空
+- `columns` 必须至少包含 1 个列名
 
 YAML：
 

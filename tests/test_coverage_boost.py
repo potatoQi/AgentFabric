@@ -164,6 +164,36 @@ def test_db_defaults_apply_to_obj_and_row_without_connecting() -> None:
     assert row2["name"] == "X"
 
 
+def test_db_defaults_do_not_override_zero_false_empty_string() -> None:
+    cfg = ConfigSpec(
+        tables={
+            "t": TableSpec(
+                primary_key=["id"],
+                columns={
+                    "id": ColumnSpec(type="text", nullable=False),
+                    "n": ColumnSpec(type="int", nullable=False, default=123),
+                    "flag": ColumnSpec(type="bool", nullable=False, default=True),
+                    "s": ColumnSpec(type="text", nullable=False, default="Default"),
+                },
+            )
+        }
+    )
+
+    db = DB(url="postgresql+psycopg://u:p@localhost:5432/db", config=cfg)
+    Model = db.models["t"]
+
+    obj = Model(id="1", n=0, flag=False, s="")
+    obj2 = db._apply_sdk_defaults_obj(obj)
+    assert obj2.n == 0
+    assert obj2.flag is False
+    assert obj2.s == ""
+
+    row = db._apply_sdk_defaults_row("t", {"id": "1", "n": 0, "flag": False, "s": ""})
+    assert row["n"] == 0
+    assert row["flag"] is False
+    assert row["s"] == ""
+
+
 def test_schema_registry_freeze_blocks_registration() -> None:
     reg = SchemaRegistry()
     t1 = reg.register_table("t")

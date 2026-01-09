@@ -27,6 +27,9 @@ where = {
 - `where[field]` 必须是 dict，否则抛 `TypeError`
 - 同一字段可写多个算子，语义是 AND（全部条件都要满足）
 
+补充：`where[field]` 是一个 dict，因此同一个算子（同一个 key）在语法上无法出现两次。
+例如你不能表达“同时写两次 is_null 并让系统检测矛盾”，因为 `{"is_null": True, "is_null": False}` 在 Python/YAML 里只会保留最后一个值。
+
 ## 支持的算子（普通列）
 
 普通列支持的算子集合：

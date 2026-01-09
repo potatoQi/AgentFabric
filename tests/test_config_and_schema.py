@@ -47,6 +47,46 @@ tables:
     assert cfg.tables["t"].columns["tags"].item_type == "text"
 
 
+def test_config_rejects_whitespace_only_table_name() -> None:
+    with pytest.raises(ValueError, match="table name cannot be empty"):
+        ConfigSpec(
+            tables={
+                "   ": TableSpec(
+                    primary_key=["id"],
+                    columns={"id": ColumnSpec(type="text", nullable=False)},
+                )
+            }
+        )
+
+
+def test_config_rejects_reserved_extra_column_name() -> None:
+    with pytest.raises(ValueError, match="reserved column name"):
+        ConfigSpec(
+            tables={
+                "t": TableSpec(
+                    primary_key=["id"],
+                    columns={
+                        "id": ColumnSpec(type="text", nullable=False),
+                        "extra": ColumnSpec(type="text", nullable=False),
+                    },
+                )
+            }
+        )
+
+
+def test_config_rejects_index_with_empty_columns_list() -> None:
+    with pytest.raises(ValueError, match="must have at least one column"):
+        ConfigSpec(
+            tables={
+                "t": TableSpec(
+                    primary_key=["id"],
+                    columns={"id": ColumnSpec(type="text", nullable=False)},
+                    indexes=[{"name": "idx_empty", "columns": []}],
+                )
+            }
+        )
+
+
 def test_registry_validates_pk_columns_exist() -> None:
     with pytest.raises(Exception, match="primary_key column not found"):
         ConfigSpec(

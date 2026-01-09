@@ -30,6 +30,17 @@ class IndexSpec(BaseModel):
     name: str
     columns: list[str]
 
+    @model_validator(mode="after")
+    def _validate_index(self):
+        if not isinstance(self.name, str) or self.name.strip() == "":
+            raise ValueError("index name cannot be empty")
+        if not self.columns:
+            raise ValueError(f"index '{self.name}' must have at least one column")
+        for c in self.columns:
+            if not isinstance(c, str) or c.strip() == "":
+                raise ValueError(f"index '{self.name}' has empty column name")
+        return self
+
 
 class ForeignKeySpec(BaseModel):
     columns: list[str]
@@ -49,6 +60,12 @@ class TableSpec(BaseModel):
     def _validate_columns_and_primary_key(self):
         if not self.primary_key:
             raise ValueError("primary_key is required for every table")
+
+        # Reserved column: every table automatically gets an `extra` JSONB column.
+        # Reject any user-defined column that would collide or confuse.
+        for name in self.columns.keys():
+            if isinstance(name, str) and name.lower() == "extra":
+                raise ValueError("'extra' is a reserved column name used by AgentFabric")
 
         # Postgres treats unquoted identifiers as case-insensitive.
         # We reject case-insensitive duplicates to avoid ambiguous schemas.
