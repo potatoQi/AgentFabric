@@ -16,9 +16,13 @@ This testing effort identified logic bugs and edge cases through comprehensive u
 
 ### 测试用例数量 / Test Cases
 - **总测试数 / Total Tests:** 175
-- **通过 / Passed:** 175
+- **通过 / Passed:** 175 ✅
 - **失败 / Failed:** 0
 - **跳过 / Skipped:** 19 (需要 PostgreSQL 数据库连接 / Require PostgreSQL connection)
+
+**注意 / Note:** 所有测试都通过是因为它们测试**当前行为**，包括 bug 演示测试。Bug 演示测试通过断言当前（有bug的）行为来证明 bug 存在，而不是期望的行为。修复 bug 后，这些测试需要更新以反映正确的行为。
+
+**Note:** All tests pass because they test **current behavior**, including bug demonstration tests. Bug demonstration tests assert the current (buggy) behavior to prove bugs exist, not the expected behavior. After fixing bugs, these tests would need updates to reflect correct behavior.
 
 ### 代码覆盖率 / Code Coverage
 
@@ -37,6 +41,55 @@ This testing effort identified logic bugs and edge cases through comprehensive u
 **注意:** db/facade.py 的较低覆盖率（72%）是因为很多数据库操作需要真实的 PostgreSQL 连接。这些功能在黑盒测试中已验证。
 
 **Note:** Lower coverage in db/facade.py (72%) is due to database operations requiring real PostgreSQL connections. These are validated in black-box tests.
+
+---
+
+## 测试方法说明 / Testing Methodology
+
+### Bug 演示测试 / Bug Demonstration Tests
+
+本次测试采用了"演示当前行为"的方法来证明 bug 的存在：
+
+This testing uses a "demonstrate current behavior" approach to prove bugs exist:
+
+1. **测试当前行为 / Test Current Behavior**
+   - Bug 演示测试断言代码的**当前**行为（包括 bug）
+   - 这些测试全部通过，因为它们准确反映了当前实现
+   - Bug demonstration tests assert the **current** behavior (including bugs)
+   - These tests all pass because they accurately reflect the current implementation
+
+2. **文档化预期行为 / Document Expected Behavior**
+   - 测试注释中说明了**预期**的正确行为
+   - 注释显示当前行为与预期行为的差异
+   - Test comments describe the **expected** correct behavior
+   - Comments show the difference between current and expected behavior
+
+3. **修复后的更新 / Updates After Fixes**
+   - 修复 bug 后，需要更新这些测试以断言正确的行为
+   - 例如：`assert row["name"] is None` 而不是 `assert row["name"] == "Default"`
+   - After fixing bugs, these tests need updates to assert correct behavior
+   - Example: `assert row["name"] is None` instead of `assert row["name"] == "Default"`
+
+### 示例 / Example
+
+```python
+def test_bug_1_demonstration():
+    # 当前行为 / Current behavior (buggy)
+    assert row["name"] == "Default"  # ⚠️ Bug: None was replaced
+    
+    # 预期行为（注释） / Expected behavior (in comment)
+    # assert row["name"] is None  # ✓ Expected: None should stay None
+```
+
+这种方法的优势：
+- ✅ 清晰地展示 bug 的实际影响
+- ✅ 提供修复前后的对比
+- ✅ 测试可以作为回归测试（修复后）
+
+Benefits of this approach:
+- ✅ Clearly demonstrates the actual impact of bugs
+- ✅ Provides before/after comparison
+- ✅ Tests can serve as regression tests (after fixes)
 
 ---
 
