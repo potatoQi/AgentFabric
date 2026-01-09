@@ -53,6 +53,12 @@ where = {
 
 `extra.xxx` 表示在 JSONB 的 `extra` 字段里取 key `xxx`，并把它按“文本”处理。
 
+支持嵌套路径：`extra.a.b.c` 会被解释为 JSON 路径 `extra['a']['b']['c']`。
+
+如果你的 JSON key 本身包含 `.`，可以用反斜杠转义：
+
+- `extra.a\.b.c` 等价于 `extra['a.b']['c']`
+
 例如：
 
 ```python
@@ -106,4 +112,23 @@ filter = {
 }
 
 rows = db.query("t", filter)
+```
+
+`is_null` 用法示例：
+
+```python
+# 取 attempt 为 NULL 的行
+{
+  "attempt": {"is_null": True}
+}
+
+# 取 attempt 非 NULL 的行
+{
+  "attempt": {"is_null": False}
+}
+
+# extra.* 也支持 is_null（注意 extra.* 走文本视图）
+{
+  "extra.tag": {"is_null": True}
+}
 ```

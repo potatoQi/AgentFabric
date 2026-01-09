@@ -36,5 +36,6 @@ testpaths = ["tests"]
 
 [dependency-groups]
 dev = [
-    "pytest>=9.0.2",
+  "pytest>=9.0.2",
+  "pytest-cov>=5.0.0",
 ]

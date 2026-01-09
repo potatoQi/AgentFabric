@@ -221,18 +221,12 @@ def test_potential_bug_query_filter_eq_none():
         Column("extra", JSONB, nullable=False),
     )
 
-    # Using eq: None - what should this do?
-    clauses1 = build_where(t, {"id": {"eq": None}}, allowed_fields={"id"})
+    with pytest.raises(ValueError, match="Use 'is_null: True/False'"):
+        build_where(t, {"id": {"eq": None}}, allowed_fields={"id"})
 
     # Using is_null: True - explicit NULL check
     clauses2 = build_where(t, {"id": {"is_null": True}}, allowed_fields={"id"})
-
-    # Are these different?
-    print(f"eq: None produces {len(clauses1)} clauses")
-    print(f"is_null: True produces {len(clauses2)} clauses")
-
-    # The eq: None might be silently skipped (because cond[op] is not None check)
-    # This could be confusing behavior
+    assert len(clauses2) == 1
 
 
 # ============================================================================

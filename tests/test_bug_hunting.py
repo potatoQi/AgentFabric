@@ -248,15 +248,12 @@ def test_bug_hunt_query_filter_with_none_values():
         Column("extra", JSONB, nullable=False),
     )
 
-    # BUG CANDIDATE: What happens with None values in operations?
-    clauses = build_where(
-        t,
-        {"id": {"eq": None}},  # Comparing with None
-        allowed_fields={"id"},
-    )
-    # This might silently skip the clause instead of using IS NULL
-    # Check the actual behavior
-    assert len(clauses) >= 0  # Should handle this somehow
+    with pytest.raises(ValueError, match="Use 'is_null: True/False'"):
+        build_where(
+            t,
+            {"id": {"eq": None}},  # Comparing with None
+            allowed_fields={"id"},
+        )
 
 
 def test_bug_hunt_query_filter_multiple_is_null():

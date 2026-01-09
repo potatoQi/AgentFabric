@@ -105,6 +105,25 @@ def test_registry_validates_index_columns_exist() -> None:
         SchemaRegistry.from_config(cfg)
 
 
+def test_registry_rejects_duplicate_index_names() -> None:
+    # Column-level index will be named idx_t_repo; explicit index must not reuse it.
+    cfg = ConfigSpec(
+        tables={
+            "t": TableSpec(
+                primary_key=["id"],
+                columns={
+                    "id": ColumnSpec(type="text", nullable=False),
+                    "repo": ColumnSpec(type="text", nullable=False, index=True),
+                },
+                indexes=[{"name": "idx_t_repo", "columns": ["repo"]}],
+            )
+        }
+    )
+
+    with pytest.raises(ValueError, match="duplicate index name"):
+        SchemaRegistry.from_config(cfg)
+
+
 def test_registry_validates_fk_column_count_mismatch() -> None:
     cfg = ConfigSpec(
         tables={

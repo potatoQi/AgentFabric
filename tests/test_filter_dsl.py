@@ -57,6 +57,27 @@ def test_build_where_is_null_true_false() -> None:
     c2 = build_where(t, {"attempt": {"is_null": False}}, allowed_fields={"attempt"})
     assert len(c2) == 1
 
+    def test_build_where_eq_ne_none_are_rejected() -> None:
+        from sqlalchemy import Column, Integer, MetaData, Table
+        from sqlalchemy.dialects.postgresql import JSONB
+
+        md = MetaData()
+        t = Table(
+            "test",
+            md,
+            Column("id", Integer, nullable=True),
+            Column("extra", JSONB, nullable=False),
+        )
+
+        with pytest.raises(ValueError, match="Use 'is_null: True/False'"):
+            build_where(t, {"id": {"eq": None}}, allowed_fields={"id"})
+
+        with pytest.raises(ValueError, match="Use 'is_null: True/False'"):
+            build_where(t, {"id": {"ne": None}}, allowed_fields={"id"})
+
+        with pytest.raises(ValueError, match="Use 'is_null: True/False'"):
+            build_where(t, {"extra.tag": {"eq": None}})
+
 
 def test_build_where_unknown_op_is_ignored_for_normal_fields() -> None:
     t = _table()
@@ -86,6 +107,28 @@ def test_build_where_extra_allows_only_text_safe_ops() -> None:
 
     with pytest.raises(ValueError, match="unsupported op"):
         build_where(t, {"extra.tag": {"gt": 1}})
+
+
+    def test_build_where_extra_nested_path_is_supported() -> None:
+        t = _table()
+        clauses = build_where(t, {"extra.a.b": {"eq": "x"}})
+        assert len(clauses) == 1
+        s = str(clauses[0])
+        assert "extra" in s
+        # Postgres JSON traversal should mention both keys in compiled SQL.
+        assert "a" in s and "b" in s
+
+
+    def test_build_where_extra_nested_path_dot_escape() -> None:
+        t = _table()
+        clauses = build_where(t, {"extra.a\\.b.c": {"eq": "x"}})
+        assert len(clauses) == 1
+
+
+    def test_build_where_extra_nested_path_rejects_empty_segment() -> None:
+        t = _table()
+        with pytest.raises(ValueError, match="empty segment"):
+            build_where(t, {"extra.a..b": {"eq": "x"}})
 
 
 def test_build_where_extra_in_empty_list_returns_empty_result_clause() -> None:

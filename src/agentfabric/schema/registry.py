@@ -66,7 +66,13 @@ class SchemaRegistry:
             if hasattr(obj, key):
                 return getattr(obj, key)
             if isinstance(obj, dict):
-                return obj.get(key)
+                if key in obj:
+                    return obj[key]
+                if key == "on_delete":
+                    return None
+                raise TypeError(f"invalid foreign key spec item: missing '{key}'")
+            if key == "on_delete":
+                return None
             raise TypeError(f"invalid foreign key spec item: missing '{key}'")
 
         for table_name, ts in cfg.tables.items():
@@ -100,11 +106,28 @@ class SchemaRegistry:
         return reg
 
     def _validate(self) -> None:
+        # Index names must be unique within a Postgres schema.
+        # Validate both implicit column indexes (idx_{table}_{col}) and explicit indexes.
+        index_names: set[str] = set()
+
         for tname, tdef in self.tables.items():
             # PK columns exist
             for pk in tdef.primary_key:
                 if pk not in tdef.columns:
                     raise ValueError(f"table '{tname}' primary_key column not found: {pk}")
+
+            # index names are unique
+            for c in tdef.columns.values():
+                if c.index:
+                    idx_name = f"idx_{tname}_{c.name}"
+                    if idx_name in index_names:
+                        raise ValueError(f"duplicate index name: {idx_name}")
+                    index_names.add(idx_name)
+
+            for idx in tdef.indexes:
+                if idx.name in index_names:
+                    raise ValueError(f"duplicate index name: {idx.name}")
+                index_names.add(idx.name)
 
             # index columns exist
             for idx in tdef.indexes:
