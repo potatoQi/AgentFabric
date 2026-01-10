@@ -120,7 +120,8 @@ def test_stress_deeply_nested_json_defaults():
                 primary_key=["id"],
                 columns={
                     "id": ColumnSpec(type="text", nullable=False),
-                    "config": ColumnSpec(type="json", nullable=False, default=deep_nested),
+                    # json column type is not supported; keep deep-copy/default handling regression coverage.
+                    "config": ColumnSpec(type="text", nullable=False, default=deep_nested),
                 },
             )
         }

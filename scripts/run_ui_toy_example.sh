@@ -139,6 +139,7 @@ echo "Seeding toy data (100 diverse rows) + previewable file URLs" >&2
 CFG_PATH="$CFG_PATH" ARTIFACT_DIR="$ARTIFACT_DIR" DB_URL="$DB_URL" ARTIFACT_BASE_URL="$ARTIFACT_BASE_URL" uv run python - <<'PY'
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
+import json
 import random
 import os
 
@@ -269,6 +270,7 @@ for i in range(100):
       "pass": bool(i % 4),
       "tokens": 1000 + i,
     }
+    metric = json.dumps(metric, ensure_ascii=False)
 
   end_time_infer = (now - timedelta(minutes=i)).isoformat() if i % 2 == 1 else None
   end_time_harness = (now - timedelta(minutes=i * 2)).isoformat() if i % 7 == 0 else None

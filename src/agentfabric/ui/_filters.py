@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
+import re
 from typing import Any
+from uuid import UUID
 
 import streamlit as st
 
@@ -29,7 +32,10 @@ def infer_ops(col_type: str) -> list[str]:
         return ["eq", "ne", "is_null", "not_null"]
     if col_type == "list":
         return ["eq", "ne", "is_null", "not_null"]
-    # text / uuid / json
+    if col_type == "uuid":
+        # UUID columns: avoid text ops like `like` (may error / be confusing).
+        return ["eq", "ne", "in_", "nin", "is_null", "not_null"]
+    # text
     return ["eq", "ne", "like", "in_", "nin", "is_null", "not_null"]
 
 
@@ -46,9 +52,118 @@ def parse_scalar(raw: str, type_name: str) -> Any:
             return False
         raise ValueError("bool expects true/false")
     if type_name == "datetime":
-        # SQLAlchemy/psycopg can parse ISO-like strings.
-        return raw.strip()
+        s = raw.strip()
+
+        # Normalize UI-friendly format: YYYY-MM-DD/HH-MM-SS -> YYYY-MM-DD HH:MM:SS
+        if "/" in s:
+            date_part, time_part = s.split("/", 1)
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_part) and re.fullmatch(
+                r"\d{2}-\d{2}-\d{2}", time_part
+            ):
+                s = f"{date_part} {time_part.replace('-', ':')}"
+
+        # Accept date-only input by interpreting it as midnight UTC-local time.
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
+            return datetime.fromisoformat(f"{s} 00:00:00")
+
+        # Accept ISO 8601 (with optional offset). Handle trailing 'Z'.
+        s2 = s
+        if s2.endswith("Z"):
+            s2 = f"{s2[:-1]}+00:00"
+
+        try:
+            return datetime.fromisoformat(s2)
+        except ValueError:
+            raise ValueError("datetime expects YYYY-MM-DD or YYYY-MM-DD/HH-MM-SS or ISO 8601")
+    if type_name == "uuid":
+        try:
+            return UUID(raw.strip())
+        except Exception:
+            raise ValueError("uuid expects 8-4-4-4-12 hex (e.g. 550e8400-e29b-41d4-a716-446655440000)")
     return raw
+
+
+def value_placeholder(op: str, type_name: str, item_type_name: str | None) -> str:
+    # NULL checks ignore value.
+    if op in {"is_null", "not_null"}:
+        return ""
+
+    def _scalar_example(t: str) -> str:
+        if t == "int":
+            return "123"
+        if t == "float":
+            return "3.14"
+        if t == "bool":
+            return "true"
+        if t == "uuid":
+            return "550e8400-e29b-41d4-a716-446655440000"
+        if t == "datetime":
+            return "2025-01-10/12-30-00"
+        # text default
+        return "abc"
+
+    def _scalar_hint(t: str) -> str:
+        if t == "datetime":
+            return "YYYY-MM-DD or YYYY-MM-DD/HH-MM-SS"
+        if t == "bool":
+            return "true/false"
+        if t == "uuid":
+            return "550e8400-e29b-41d4-a716-446655440000"
+        if t == "int":
+            return "e.g. 123"
+        if t == "float":
+            return "e.g. 3.14"
+        return "e.g. abc"
+
+    def _csv_hint(t: str) -> str:
+        if t == "datetime":
+            return "YYYY-MM-DD,YYYY-MM-DD or YYYY-MM-DD/HH-MM-SS,..."
+        if t == "uuid":
+            return "uuid1,uuid2"
+        if t == "int":
+            return "e.g. 1,2,3"
+        if t == "float":
+            return "e.g. 0.1,0.2"
+        if t == "bool":
+            return "e.g. true,false"
+        # text default
+        return "a,b,c"
+
+    # list columns always accept CSV input (per parse_value implementation).
+    if type_name == "list":
+        it = item_type_name or "text"
+        return _csv_hint(it)
+
+    # op-specific hints
+    if op in {"in_", "nin"}:
+        return _csv_hint(type_name)
+    if op == "like":
+        return "e.g. abc%"
+
+    # scalar hints
+    if type_name in {"int", "float", "bool", "uuid", "datetime", "text", "str"}:
+        return _scalar_hint(type_name)
+
+    # fallback
+    return f"e.g. {_scalar_example(type_name)}"
+
+
+def _selectbox_compat(dg: Any, /, **kwargs: Any):
+    """Call Streamlit selectbox with best-effort width support.
+
+    Some Streamlit versions do not support `use_container_width` on selectbox.
+    """
+
+    try:
+        return dg.selectbox(**kwargs, use_container_width=True)
+    except TypeError:
+        return dg.selectbox(**kwargs)
+
+
+def _submit_if_null_op(table: str, table_spec: Any, selected: str, op_state_key: str) -> None:
+    op = str(st.session_state.get(op_state_key) or "").strip()
+    if op in {"is_null", "not_null"}:
+        _submit_selected(table, table_spec, selected)
 
 
 def parse_value(op: str, raw: str, type_name: str, item_type_name: str | None) -> Any:
@@ -104,6 +219,25 @@ def _saved_key(table: str) -> str:
 
 def _applied_where_key(table: str) -> str:
     return _state_key(table, "applied_where")
+
+
+def _submit_error_key(table: str, field: str) -> str:
+    return _state_key(table, f"submit_error::{field}")
+
+
+def _set_submit_error(table: str, field: str, msg: str) -> None:
+    st.session_state[_submit_error_key(table, field)] = str(msg)
+
+
+def _get_submit_error(table: str, field: str) -> str | None:
+    v = st.session_state.get(_submit_error_key(table, field))
+    if isinstance(v, str) and v.strip():
+        return v
+    return None
+
+
+def _clear_submit_error(table: str, field: str) -> None:
+    st.session_state.pop(_submit_error_key(table, field), None)
 
 
 def _rev_key(table: str, field: str) -> str:
@@ -166,6 +300,7 @@ def _set_selected(table: str, field: str) -> None:
         else:
             prev_key = prev
         _discard_draft(table, prev_key)
+        _clear_submit_error(table, prev_key)
     st.session_state[_state_key(table, "selected")] = field
 
 
@@ -373,8 +508,14 @@ def _submit_selected(table: str, table_spec: Any, field: str) -> None:
         _set_extra_rows(table, committed)
         _set_draft_len(table, "__extra__", len(committed))
         _bump_rev(table, "__extra__")
+        _clear_submit_error(table, "__extra__")
         rebuild_applied(table, table_spec)
         return
+
+    cols = getattr(table_spec, "columns", {})
+    col_spec = cols.get(field)
+    type_name = getattr(col_spec, "type_name", "text")
+    item_type_name = getattr(col_spec, "item_type_name", None)
 
     saved_rows = _get_field_rows(table, field)
     draft_len = _get_draft_len(table, field, saved_len=len(saved_rows))
@@ -386,11 +527,39 @@ def _submit_selected(table: str, table_spec: Any, field: str) -> None:
             "op": str(st.session_state.get(op_key) or ""),
             "raw": str(st.session_state.get(v_key) or ""),
         }
-        if _row_is_effective(row, is_extra=False):
-            committed.append(row)
+
+        if not _row_is_effective(row, is_extra=False):
+            continue
+
+        op = (row.get("op") or "").strip()
+        if op in {"is_null", "not_null"}:
+            committed.append({"op": op, "raw": ""})
+            continue
+
+        raw_s = (row.get("raw") or "").strip()
+        try:
+            parse_value(op, raw_s, type_name, item_type_name)
+        except Exception as e:
+            ph = value_placeholder(op, type_name, item_type_name)
+            # Keep message short; show it inside the filters panel (stored in session_state).
+            _set_submit_error(
+                table,
+                field,
+                f"Invalid value (#{i + 1}, op={_OP_LABELS.get(op, op)}). Expected: {ph}.",
+            )
+            # Ensure the error appears on the *first* Enter: the error banner is
+            # rendered above the form, so we force a rerun after storing it.
+            try:
+                st.rerun()
+            except Exception:
+                pass
+            return
+
+        committed.append(row)
     _set_field_rows(table, field, committed)
     _set_draft_len(table, field, len(committed))
     _bump_rev(table, field)
+    _clear_submit_error(table, field)
     rebuild_applied(table, table_spec)
 
 
@@ -405,8 +574,45 @@ def render_filters_popover_content(db: DBManager, table: str, table_spec: Any) -
         st.caption("No filterable fields in this table.")
         return
 
+    # Streamlit versions differ in selectbox width behavior (and some don't support
+    # `use_container_width`). Enforce a sensible minimum so labels like "not null"
+    # don't get truncated in narrow popovers.
+    st.markdown(
+        """
+        <style>
+        /* Keep the Filters trigger button constrained to its column. */
+        div[data-testid="stPopover"] {
+          width: 100% !important;
+          max-width: 100% !important;
+        }
+
+        /* Widen only the floating panel (body/content), not the trigger.
+           Streamlit DOM varies by version; the actual panel is BaseWeb "popover" Body.
+           Target specific stPopoverBody to avoid affecting nested popovers like selectbox menus. */
+        div[data-testid="stPopoverBody"] {
+          width: min(1200px, 95vw) !important;
+          min-width: min(1200px, 95vw) !important;
+          max-width: 95vw !important;
+        }
+
+        div[data-baseweb="select"] > div { min-width: 100%; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Some Streamlit versions auto-size popovers to the intrinsic content width.
+    # Normal fields may stay narrow (2 columns) while extra.* appears wider.
+    # Add a zero-height spacer to request a wider floating panel without affecting
+    # the trigger button width.
+    st.markdown(
+        '<div style="width: min(1200px, 95vw); height: 0; overflow: hidden;"></div>',
+        unsafe_allow_html=True,
+    )
+
     spec_by_name = {n: s for n, s in filterable}
-    left, right = st.columns([1.15, 2.0], gap="medium")
+    # Give more space to the condition editor panel.
+    left, right = st.columns([0.9, 3.1], gap="medium")
 
     with left:
         options = [n for n, _ in filterable] + ["extra.*", "others"]
@@ -447,6 +653,19 @@ def render_filters_popover_content(db: DBManager, table: str, table_spec: Any) -
                 )
 
     with right:
+        # Show submit/validation errors inside the 2nd-level panel (not the main page).
+        # Map the UI selection to the internal field key.
+        if selected == "extra.*":
+            _err_field = "__extra__"
+        elif selected == "others":
+            _err_field = "__others__"
+        else:
+            _err_field = selected
+
+        err = _get_submit_error(table, _err_field)
+        if err:
+            st.error(err)
+
         if selected == "others":
             st.markdown("**others**")
 
@@ -473,7 +692,7 @@ def render_filters_popover_content(db: DBManager, table: str, table_spec: Any) -
             )
 
         elif selected == "extra.*":
-            st.markdown("**extra.* (top-level key)**")
+            st.markdown("**extra.\\***")
             field_key = "__extra__"
             saved_rows = _get_extra_rows(table)
             rev = _get_rev(table, field_key)
@@ -498,52 +717,52 @@ def render_filters_popover_content(db: DBManager, table: str, table_spec: Any) -
             )
 
             st.caption("Press Enter to apply conditions for this field")
-            with st.form(key=_state_key(table, f"form::{field_key}::{rev}"), clear_on_submit=False):
-                if draft_len == 0:
-                    st.caption("No conditions. Click + to add one.")
 
-                for i in range(draft_len):
-                    r = saved_rows[i] if i < len(saved_rows) else {"key": "", "op": "", "raw": ""}
-                    row = st.columns([1.4, 1.0, 2.0])
-                    row[0].text_input(
-                        "extra key",
-                        key=_state_key(table, f"draft_extra_key::{i}::{rev}"),
-                        value=str(r.get("key") or ""),
-                        placeholder="tag",
-                        label_visibility="collapsed",
-                    )
+            if draft_len == 0:
+                st.caption("No conditions. Click + to add one.")
 
-                    extra_ops = ["", "eq", "ne", "like", "in_", "nin", "is_null", "not_null"]
-                    cur_op = str(r.get("op") or "")
-                    idx = extra_ops.index(cur_op) if cur_op in extra_ops else 0
-                    extra_op = row[1].selectbox(
-                        "op",
-                        options=extra_ops,
-                        index=idx,
-                        key=_state_key(table, f"draft_extra_op::{i}::{rev}"),
-                        label_visibility="collapsed",
-                        format_func=lambda v: _OP_LABELS.get(v, v),
-                    )
-
-                    if extra_op in {"is_null", "not_null"}:
-                        row[2].caption("NULL check ignores value")
-                    else:
-                        row[2].text_input(
-                            "value",
-                            key=_state_key(table, f"draft_extra_val::{i}::{rev}"),
-                            value=str(r.get("raw") or ""),
-                            placeholder=("a,b,c" if extra_op in {"in_", "nin"} else "value"),
-                            label_visibility="collapsed",
-                        )
-
-                submitted = st.form_submit_button(
-                    " ",
-                    help="__AF_APPLY__",
-                    key=_state_key(table, f"submit::{field_key}::{rev}"),
-                    type="tertiary",
+            for i in range(draft_len):
+                r = saved_rows[i] if i < len(saved_rows) else {"key": "", "op": "", "raw": ""}
+                row = st.columns([1.5, 1.0, 3.5])
+                row[0].text_input(
+                    "extra key",
+                    key=_state_key(table, f"draft_extra_key::{i}::{rev}"),
+                    value=str(r.get("key") or ""),
+                    placeholder="tag",
+                    label_visibility="collapsed",
                 )
-                if submitted:
-                    _submit_selected(table, table_spec, selected)
+
+                extra_ops = ["", "eq", "ne", "like", "in_", "nin", "is_null", "not_null"]
+                cur_op = str(r.get("op") or "")
+                idx = extra_ops.index(cur_op) if cur_op in extra_ops else 0
+                extra_op_key = _state_key(table, f"draft_extra_op::{i}::{rev}")
+                extra_op = _selectbox_compat(
+                    row[1],
+                    label="op",
+                    options=extra_ops,
+                    index=idx,
+                    key=extra_op_key,
+                    label_visibility="collapsed",
+                    format_func=lambda v: _OP_LABELS.get(v, v),
+                    on_change=_submit_if_null_op,
+                    args=(table, table_spec, selected, extra_op_key),
+                )
+
+                if extra_op in {"is_null", "not_null"}:
+                    row[2].caption("NULL check ignores value")
+                else:
+                    extra_placeholder = value_placeholder(extra_op, "text", None) or "value"
+
+                    row[2].text_input(
+                        "value",
+                        key=_state_key(table, f"draft_extra_val::{i}::{rev}"),
+                        value=str(r.get("raw") or ""),
+                        placeholder=extra_placeholder,
+                        label_visibility="collapsed",
+                        on_change=_submit_selected,
+                        args=(table, table_spec, selected),
+                    )
+
 
         else:
             col_spec = spec_by_name[selected]
@@ -575,55 +794,40 @@ def render_filters_popover_content(db: DBManager, table: str, table_spec: Any) -
 
             st.caption("Press Enter to apply conditions for this field")
             ops = [""] + infer_ops(type_name)
-            with st.form(key=_state_key(table, f"form::{selected}::{rev}"), clear_on_submit=False):
-                if draft_len == 0:
-                    st.caption("No conditions. Click + to add one.")
 
-                for i in range(draft_len):
-                    r = saved_rows[i] if i < len(saved_rows) else {"op": "", "raw": ""}
-                    row = st.columns([1.0, 2.2])
-                    cur_op = str(r.get("op") or "")
-                    idx = ops.index(cur_op) if cur_op in ops else 0
-                    op = row[0].selectbox(
-                        "op",
-                        options=ops,
-                        index=idx,
-                        key=_state_key(table, f"draft_op::{selected}::{i}::{rev}"),
-                        label_visibility="collapsed",
-                        format_func=lambda v: _OP_LABELS.get(v, v),
-                    )
+            if draft_len == 0:
+                st.caption("No conditions. Click + to add one.")
 
-                    if op in {"is_null", "not_null"}:
-                        row[1].caption("NULL check ignores value")
-                    else:
-                        placeholder = "value"
-                        if op in {"in_", "nin"}:
-                            placeholder = "a,b,c"
-                        elif op == "like":
-                            placeholder = "e.g. abc%"
-                        elif type_name == "datetime":
-                            placeholder = "YYYY-MM-DD"
-                        elif type_name == "list":
-                            placeholder = "a,b,c"
-                        elif type_name == "bool":
-                            placeholder = "true/false"
-
-                        row[1].text_input(
-                            "value",
-                            key=_state_key(table, f"draft_val::{selected}::{i}::{rev}"),
-                            value=str(r.get("raw") or ""),
-                            placeholder=placeholder,
-                            label_visibility="collapsed",
-                        )
-
-                submitted = st.form_submit_button(
-                    " ",
-                    help="__AF_APPLY__",
-                    key=_state_key(table, f"submit::{selected}::{rev}"),
-                    type="tertiary",
+            for i in range(draft_len):
+                r = saved_rows[i] if i < len(saved_rows) else {"op": "", "raw": ""}
+                row = st.columns([1.0, 4.0])
+                cur_op = str(r.get("op") or "")
+                idx = ops.index(cur_op) if cur_op in ops else 0
+                op_key = _state_key(table, f"draft_op::{selected}::{i}::{rev}")
+                op = _selectbox_compat(
+                    row[0],
+                    label="op",
+                    options=ops,
+                    index=idx,
+                    key=op_key,
+                    label_visibility="collapsed",
+                    format_func=lambda v: _OP_LABELS.get(v, v),
+                    on_change=_submit_if_null_op,
+                    args=(table, table_spec, selected, op_key),
                 )
-                if submitted:
-                    _submit_selected(table, table_spec, selected)
+
+                if op in {"is_null", "not_null"}:
+                    row[1].caption("NULL check ignores value")
+                else:
+                    row[1].text_input(
+                        "value",
+                        key=_state_key(table, f"draft_val::{selected}::{i}::{rev}"),
+                        value=str(r.get("raw") or ""),
+                        placeholder=value_placeholder(op, type_name, getattr(col_spec, "item_type_name", None)),
+                        label_visibility="collapsed",
+                        on_change=_submit_selected,
+                        args=(table, table_spec, selected),
+                    )
 
     st.divider()
     # No explicit clear-all in the UI; users can remove conditions per-field.

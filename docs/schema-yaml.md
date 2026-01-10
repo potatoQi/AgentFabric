@@ -63,7 +63,7 @@ columns:
 #### 2.2.1 type
 
 - `type` 支持：
-  - 标量：`str | text | int | float | bool | datetime | json | uuid`
+  - 标量：`str | text | int | float | bool | datetime | uuid`
   - 数组：`list`（需要 `item_type`）
 
 #### 2.2.2 filterable
@@ -86,7 +86,7 @@ columns:
 
 #### 2.2.5 固定字段 `extra`
 
-- 每张表都会自动增加 `extra` 字段，用于存放动态信息，type 为 json，默认值为 `{}`
+- 每张表都会自动增加 `extra` 字段，用于存放动态信息（保留列，底层为 Postgres JSONB），默认值为 `{}`
 
 ### 2.3 foreign_keys
 

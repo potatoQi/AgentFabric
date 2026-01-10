@@ -4,7 +4,7 @@ from typing import Any
 
 from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import text
 
 
@@ -26,8 +26,6 @@ def map_type(type_name: str, *, item_type: str | None = None):
             return Boolean()
         case "datetime":
             return DateTime(timezone=True)
-        case "json":
-            return JSONB
         case "uuid":
             return UUID(as_uuid=True)
         case _:

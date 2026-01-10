@@ -213,23 +213,90 @@
   }
   ```
 
-### 支持的比较方式（普通列）
+### 示例：覆盖所有支持的数据类型与 op
 
-- 写法：`{"field": {"op": value}}`
-- op：
-  - `eq` / `ne` / `lt` / `lte` / `gt` / `gte`
-  - `in_` / `nin`
-  - `like`
-  - `is_null: True/False`
-- 一个字段可以写多个 op，例如
+说明：下列示例假设你的 schema 中分别存在这些列类型。
 
-  ```python
-  where = {"n": {"gte": 0, "lt": 10}}
-  ```
+- 支持的列类型：`str | text | int | float | bool | datetime | uuid | list[]`
 
-  等价于：`0 <= n < 10`
+#### 1) text / str（支持：eq/ne/like/in_/nin/is_null）
 
-### `extra.*` 扩展字段
+```python
+where = {
+  "name": {"eq": "alice"},
+  "repo": {"like": "repo/%"},
+  "status": {"in_": ["ok", "warn"]},
+  "tag": {"nin": ["x", "y"]},
+  "note": {"is_null": False},
+}
+```
+
+#### 2) int（支持：eq/ne/lt/lte/gt/gte/in_/nin/is_null）
+
+```python
+where = {
+  "n": {"gte": 0, "lt": 10},
+  "k": {"in_": [1, 2, 3]},
+  "m": {"is_null": True},
+}
+```
+
+#### 3) float（支持同 int）
+
+```python
+where = {
+  "score": {"gt": 0.9},
+  "loss": {"lte": 0.1},
+  "p": {"nin": [0.0, 1.0]},
+}
+```
+
+#### 4) bool（支持：eq/ne/is_null）
+
+```python
+where = {
+  "passed": {"eq": True},
+  "flag": {"ne": False},
+  "maybe": {"is_null": True},
+}
+```
+
+#### 5) datetime（支持同 int；建议传 timezone-aware datetime）
+
+```python
+from datetime import datetime, timezone
+
+where = {
+  "created_at": {"gte": datetime(2025, 1, 1, tzinfo=timezone.utc)},
+  "finished_at": {"is_null": False},
+}
+```
+
+#### 6) uuid（支持：eq/ne/in_/nin/is_null；建议传 uuid.UUID）
+
+```python
+from uuid import UUID
+
+where = {
+  "id": {"eq": UUID("550e8400-e29b-41d4-a716-446655440000")},
+  "owner_id": {"in_": [
+    UUID("00000000-0000-0000-0000-000000000001"),
+    UUID("00000000-0000-0000-0000-000000000002"),
+  ]},
+}
+```
+
+#### 7) list[]（ARRAY；支持：eq/ne/is_null）
+
+```python
+where = {
+  "tags": {"eq": ["a", "b"]},
+  "nums": {"ne": [1, 2, 3]},
+  "opt": {"is_null": True},
+}
+```
+
+### extra 扩展字段
 
 - 写法：`{"extra.a.b": {...}}`
 - 功能：用 `extra` 这个扩展字段里的某个 key 来做筛选
@@ -237,3 +304,76 @@
   - `extra.a.b.c` 等价于 `extra['a']['b']['c']`
   - JSON key 内含 `.`：可用反斜杠转义，比如 `extra.a\\.b.c` 表示 key `a.b` 再取 `c`
 - 比较方式限制：`eq/ne/in_/nin/is_null/like`，其他会抛 `ValueError`
+
+### 示例：extra 的各种写法
+
+说明：`extra.*` 会从 JSONB 中取值并按“文本”进行比较（等价于取出 `extra[...]` 后转成字符串再比较）。
+
+#### 1) `eq` / `ne`
+
+```python
+where = {
+  "extra.tag": {"eq": "ui"},
+  "extra.kind": {"ne": "debug"},
+}
+```
+
+#### 2) `like`（前缀/通配）
+
+```python
+where = {
+  "extra.owner": {"like": "team-%"},
+}
+```
+
+#### 3) `in_` / `nin`（value 必须是 list）
+
+```python
+where = {
+  "extra.env": {"in_": ["dev", "staging"]},
+  "extra.region": {"nin": ["cn", "ru"]},
+}
+```
+
+#### 4) `is_null`（存在性/空值判断）
+
+```python
+where = {
+  # extra.foo 不存在或为 null
+  "extra.foo": {"is_null": True},
+
+  # extra.bar 存在且不为 null
+  "extra.bar": {"is_null": False},
+}
+```
+
+#### 5) 多层路径
+
+```python
+where = {
+  "extra.a.b.c": {"eq": "x"},
+}
+```
+
+#### 6) key 里包含 `.` 的转义
+
+```python
+where = {
+  # 表示 extra["a.b"]["c"] == "x"
+  "extra.a\\.b.c": {"eq": "x"},
+}
+```
+
+#### 7) 与 and/or 组合
+
+```python
+where = {
+  "and": [
+    {"extra.kind": {"eq": "toy"}},
+    {"or": [
+      {"extra.tag": {"in_": ["a", "b"]}},
+      {"extra.owner": {"like": "team-%"}},
+    ]},
+  ]
+}
+```

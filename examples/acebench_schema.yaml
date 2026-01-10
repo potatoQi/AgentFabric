@@ -70,7 +70,7 @@ tables:
         filterable: true
 
       repo_setting:
-        type: json
+        type: text
         nullable: true
 
       base_pass_rate:
@@ -142,7 +142,7 @@ tables:
         filterable: true
 
       metric:
-        type: json
+        type: text
         nullable: true
 
       end_time_infer:

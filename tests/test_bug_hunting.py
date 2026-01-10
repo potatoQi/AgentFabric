@@ -130,7 +130,9 @@ def test_bug_hunt_default_value_mutation_between_calls():
                 primary_key=["id"],
                 columns={
                     "id": ColumnSpec(type="text", nullable=False),
-                    "tags": ColumnSpec(type="json", nullable=False, default={"list": []}),
+                    # json column type is not supported; keep the test's intent (deep-copy literal defaults)
+                    # by using a text column with a dict default.
+                    "tags": ColumnSpec(type="text", nullable=False, default={"list": []}),
                 },
             )
         }
@@ -199,7 +201,8 @@ def test_bug_hunt_unsupported_default_value_type():
                 columns={
                     "id": ColumnSpec(type="text", nullable=False),
                     # Using a complex object as default
-                    "data": ColumnSpec(type="json", nullable=False, default={"nested": {"deep": [1, 2, 3]}}),
+                    # json column type is not supported; keep deep-copy/default handling regression coverage.
+                    "data": ColumnSpec(type="text", nullable=False, default={"nested": {"deep": [1, 2, 3]}}),
                 },
             )
         }

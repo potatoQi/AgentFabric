@@ -5,8 +5,8 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field, model_validator
 
 
-ScalarTypeName = Literal["str", "text", "int", "float", "bool", "datetime", "json", "uuid"]
-TypeName = Literal["list", "str", "text", "int", "float", "bool", "datetime", "json", "uuid"]
+ScalarTypeName = Literal["str", "text", "int", "float", "bool", "datetime", "uuid"]
+TypeName = Literal["list", "str", "text", "int", "float", "bool", "datetime", "uuid"]
 
 
 class ColumnSpec(BaseModel):

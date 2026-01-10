@@ -264,7 +264,6 @@ def test_types_helpers_cover_more_branches() -> None:
     with pytest.raises(ValueError, match="requires item_type"):
         map_type("list")
 
-    assert map_type("json") is not None
     assert map_type("uuid") is not None
 
 

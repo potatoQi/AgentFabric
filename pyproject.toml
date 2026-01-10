@@ -1,11 +1,15 @@
 [project]
 name = "agentfabric"
-version = "0.1.0"
+version = "0.2.0"
 description = "Config-driven database component for agent pipelines (PostgreSQL + SQLAlchemy + Pydantic + fsspec)."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "AgentFabric" }]
-license = { text = "Proprietary" }
+license = { file = "LICENSE" }
+
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+]
 
 dependencies = [
   "SQLAlchemy>=2.0",
@@ -21,7 +25,7 @@ dependencies = [
 agentfabric = "agentfabric.cli:main"
 
 [project.urls]
-Homepage = "https://example.invalid/agentfabric"
+Homepage = "https://github.com/potatoQi/AgentFabric"
 
 [build-system]
 requires = ["hatchling>=1.25"]

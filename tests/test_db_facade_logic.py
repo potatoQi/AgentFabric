@@ -116,7 +116,9 @@ def test_literal_default_is_deep_copied_between_rows() -> None:
                 primary_key=["id"],
                 columns={
                     "id": ColumnSpec(type="text", nullable=False, default="X"),
-                    "meta": ColumnSpec(type="json", nullable=False, default={"tags": []}),
+                    # json column type is not supported; keep the test's intent (deep-copy literal defaults)
+                    # by using a text column with a dict default.
+                    "meta": ColumnSpec(type="text", nullable=False, default={"tags": []}),
                 },
             )
         }
