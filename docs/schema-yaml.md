@@ -6,12 +6,30 @@
 
 ```yaml
 version: 1
-postgres_schema: acebench     # 可选：Postgres schema 隔离
 
+db_url: postgresql+psycopg://user:pass@host:5432/DBNAME   # 必填：数据库连接串（SQLAlchemy URL）
+artifact_base_url: file:///tmp/agentfabric-artifacts      # 可选：文件存储 base_url（用于 Store / UI 预览）
+postgres_schema: acebench     # 可选：Postgres schema 隔离（命名空间）
 tables: { ... }
 ```
 
-> `postgres_schema` 不是数据库名。`url` 里的 `.../DBNAME` 是 **数据库名**。 `postgres_schema` 是该数据库内部的 **schema**（命名空间），用来隔离/组织表。
+### 1.1 db_url
+
+- 功能：数据库连接串。AgentFabric 会用它连数据库。
+- 写法：Postgres 数据库写法：`postgresql+psycopg://<user>:<pass>@<host>:<port>/<DBNAME>`。
+- 重要说明：`.../<DBNAME>` 里的 **DBNAME 是数据库名**。
+
+### 1.2 artifact_base_url
+
+- 功能：可选的“文件存储基址”。配置了才会创建 Store
+  - 未配置：`AgentFabric()` 的第二个返回值为 `None`，DB 功能不受影响。
+- 写法：一个 base URL（结尾的 `/` 可省略）。底层基于 `fsspec`，常见示例：
+  - 本地目录：`file:///abs/path/to/artifacts`
+  - 对象存储：`s3://bucket/prefix`
+
+### 1.3 postgres_schema
+
+- `postgres_schema` 不是数据库名。`db_url` 里的 `.../DBNAME` 是 **数据库名**；`postgres_schema` 是该数据库内部的 **schema**（命名空间），用来隔离/组织表。
 
 ## 2 表定义
 
