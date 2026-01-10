@@ -118,33 +118,38 @@ if [[ ! -f "examples/acebench_schema.yaml" ]]; then
 fi
 
 echo "Generating temp config: $CFG_PATH" >&2
-uv run python - <<PY
+CFG_PATH="$CFG_PATH" DB_URL="$DB_URL" ARTIFACT_BASE_URL="$ARTIFACT_BASE_URL" uv run python - <<'PY'
 import uuid
 from pathlib import Path
+import os
 import yaml
 
 src = Path("examples/acebench_schema.yaml")
 data = yaml.safe_load(src.read_text(encoding="utf-8"))
 assert isinstance(data, dict)
 data["postgres_schema"] = f"af_ui_{uuid.uuid4().hex[:10]}"
-data["db_url"] = "${DB_URL}"
-data["artifact_base_url"] = "${ARTIFACT_BASE_URL}"
-dst = Path("$CFG_PATH")
+data["db_url"] = os.environ["DB_URL"]
+data["artifact_base_url"] = os.environ["ARTIFACT_BASE_URL"]
+dst = Path(os.environ["CFG_PATH"])
 dst.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
 print(str(dst))
 PY
 
 echo "Seeding toy data (100 diverse rows) + previewable file URLs" >&2
-uv run python - <<PY
+CFG_PATH="$CFG_PATH" ARTIFACT_DIR="$ARTIFACT_DIR" DB_URL="$DB_URL" ARTIFACT_BASE_URL="$ARTIFACT_BASE_URL" uv run python - <<'PY'
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import random
+import os
 
 from sqlalchemy import text
 
-from agentfabric import ArtifactStore, DB
+from agentfabric import AgentFabric
 
-db = DB(config_path="$CFG_PATH")
+db, store = AgentFabric(os.environ["CFG_PATH"])
+if store is None:
+  raise SystemExit("artifact_base_url is missing in config; cannot seed previewable artifacts")
+
 schema = db.registry.postgres_schema
 if schema:
   with db.engine.begin() as conn:
@@ -157,15 +162,14 @@ Traj = db.models.get("ace_traj")
 if Instance is None or Traj is None:
     raise SystemExit("examples/acebench_schema.yaml must define ace_instance and ace_traj")
 
-# Create local files, store them via ArtifactStore (file://), and write their URLs into the DB.
-artifact_dir = Path("$ARTIFACT_DIR")
-store = ArtifactStore(base_url="$ARTIFACT_BASE_URL")
+# Create local files, store them (file://), and write their URLs into the DB.
+artifact_dir = Path(os.environ["ARTIFACT_DIR"])
 
 agents = ["agent-a", "agent-b", "agent-c"]
 models = ["model-x", "model-y", "model-z"]
 repos = ["repo/alpha", "repo/beta", "repo/gamma"]
 images = ["ubuntu:22.04", "python:3.11", "debian:12"]
-now = datetime.utcnow()
+now = datetime.now(timezone.utc)
 random.seed(42)
 
 for i in range(100):
@@ -287,9 +291,9 @@ for i in range(100):
   )
 
 print("seed ok")
-print("db_url=", "$DB_URL")
-print("config=", "$CFG_PATH")
-print("artifact_base_url=", "$ARTIFACT_BASE_URL")
+print("db_url=", os.environ.get("DB_URL"))
+print("config=", os.environ.get("CFG_PATH"))
+print("artifact_base_url=", os.environ.get("ARTIFACT_BASE_URL"))
 PY
 
 echo "Launching UI…" >&2

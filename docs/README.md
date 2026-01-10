@@ -6,9 +6,10 @@
 
 - [快速开始](quickstart.md)
 - [Schema YAML 规范](schema-yaml.md)
+- [API 文档（单文件）](api/README.md)
 - [DB API（增删改查 / upsert）](db-api.md)
-- [Filter DSL（where/limit/offset）](filter-dsl.md)
-- [ArtifactStore（冷资源 URL）](artifacts.md)
+- [筛选条件 where（limit/offset）](filter-dsl.md)
+- [Store（冷资源 URL）](artifacts.md)
 - [ACE-Bench 两表示例](acebench.md)
 
 ## 运行测试

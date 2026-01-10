@@ -21,7 +21,6 @@ def load_conn_defaults_from_config(config_path: str) -> tuple[str | None, str | 
 
 @dataclass(frozen=True)
 class Conn:
-    db_url: str
     config_path: str
     artifact_base_url: str | None
 

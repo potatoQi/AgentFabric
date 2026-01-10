@@ -16,21 +16,24 @@
 
 ## 3) 连接 Postgres 并建表
 
-```python
-from agentfabric import DB
+先在 YAML 里写好 `db_url`，比如：
 
-db = DB(
-    url="postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME",
-    config_path="examples/acebench_schema.yaml",
-)
+```yaml
+db_url: postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME
+```
+
+```python
+from agentfabric import AgentFabric
+
+db, store = AgentFabric("examples/acebench_schema.yaml")
 
 db.init_schema()
 ```
 
 说明：
-- `url` 里的 `DBNAME` 是 **PostgreSQL 数据库名**（database）。
+- `db_url` 里的 `DBNAME` 是 **PostgreSQL 数据库名**（database）。
 - `postgres_schema`（YAML 里）是该数据库内部的 **schema/命名空间**（类似目录，用于隔离表名）。
-    - 例：`url=.../mydb` + `postgres_schema=acebench` 表示在数据库 `mydb` 里创建 `acebench.ace_instance`、`acebench.ace_traj`。
+    - 例：`db_url=.../mydb` + `postgres_schema=acebench` 表示在数据库 `mydb` 里创建 `acebench.ace_instance`、`acebench.ace_traj`。
     - 如果 `postgres_schema` 不填（或填 `public`），就会创建在默认 schema 下（例如 `public.ace_instance`）。
 - `init_schema()` 是 `create_all` 语义：只创建不存在的表/索引；不做迁移。
 

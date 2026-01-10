@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 from sqlalchemy import text
 
-from agentfabric import ArtifactStore, DB
+from agentfabric import AgentFabric
+from agentfabric.artifacts.store import ArtifactStore
+from agentfabric.db.facade import DB
 from agentfabric.config.spec import ColumnSpec, ConfigSpec, TableSpec
 
 
@@ -256,6 +258,7 @@ def test_inout_db_from_config_path_blackbox(db_url: str, tmp_path: Path) -> None
     cfg_path.write_text(
         f"""
 version: 1
+db_url: {db_url}
 postgres_schema: {schema}
 
 tables:
@@ -268,17 +271,17 @@ tables:
         encoding="utf-8",
     )
 
-    db = DB(url=db_url, config_path=str(cfg_path))
-    with db.engine.begin() as conn:
+    dbm, _store = AgentFabric(str(cfg_path))
+    with dbm.engine.begin() as conn:
         conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
-    db.init_schema()
+    dbm.init_schema()
 
-    T = db.models["t"]
-    db.add(T(id="k"))
+    T = dbm.models["t"]
+    dbm.add(T(id="k"))
 
-    got = db.query("t", {"where": {"id": {"eq": "k"}}})
+    got = dbm.query("t", {"where": {"id": {"eq": "k"}}})
     assert len(got) == 1
     assert got[0].msg == "Hello"
 
-    with db.engine.begin() as conn:
+    with dbm.engine.begin() as conn:
         conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))

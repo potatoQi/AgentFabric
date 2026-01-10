@@ -1,6 +1,6 @@
-# ArtifactStore（冷资源 URL）
+# Store（冷资源 URL）
 
-`agentfabric.ArtifactStore` 用于把“大文件/冷资源”写入文件系统或对象存储，并把返回的 URL 写进 DB。
+store 管理器用于把“大文件/冷资源”写入文件系统或对象存储，并把返回的 URL 写进 DB。
 
 为什么需要它：
 - DB 里更适合存“结构化元数据”（字段可筛选、可 join）
@@ -9,11 +9,15 @@
 ## 初始化
 
 ```python
-from agentfabric import ArtifactStore
+from agentfabric import AgentFabric
 
-store = ArtifactStore(base_url="file:///tmp/agentfabric-artifacts")
-# 也可以是 s3://bucket/prefix 之类（依赖 fsspec 对应的 filesystem）
+db, store = AgentFabric("path/to/schema.yaml")
+if store is None:
+    raise RuntimeError("YAML 里没写 artifact_base_url")
 ```
+
+说明：
+- 你需要在 YAML 里写 `artifact_base_url`，比如 `file:///tmp/agentfabric-artifacts` 或 `s3://bucket/prefix`
 
 `base_url` 的含义：
 - 所有写入 API 都接收 `relpath`（相对路径），最终会拼成 `url = base_url + "/" + relpath`
@@ -165,14 +169,12 @@ print(type(obj), obj)
 ### 4) 和 DB 联动：从表里取 url 再读取
 
 ```python
-from agentfabric import DB, ArtifactStore
+from agentfabric import AgentFabric
 import json
 
-db = DB(
-    url="postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME",
-    config_path="examples/acebench_schema.yaml",
-)
-store = ArtifactStore(base_url="file:///tmp/agentfabric-artifacts")
+db, store = AgentFabric("examples/acebench_schema.yaml")
+if store is None:
+    raise RuntimeError("你的配置里没写 artifact_base_url，所以 store 是 None")
 
 # 假设 ace_traj.traj_url 里存的是 store.put(...) 返回的 url
 rows = db.query(
@@ -198,14 +200,11 @@ print("loaded steps:", len(traj.get("steps", [])))
 典型模式是：先写 artifact 拿到 URL，再把 URL 写进 DB。
 
 ```python
-from agentfabric import DB, ArtifactStore
+from agentfabric import AgentFabric
 
-db = DB(
-    url="postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME",
-    config_path="examples/acebench_schema.yaml",
-)
-
-store = ArtifactStore(base_url="file:///tmp/agentfabric-artifacts")
+db, store = AgentFabric("examples/acebench_schema.yaml")
+if store is None:
+    raise RuntimeError("你的配置里没写 artifact_base_url，所以 store 是 None")
 
 # 1) 写入 patch/traj
 import json

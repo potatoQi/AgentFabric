@@ -1,3 +1,6 @@
-from .facade import DB
+"""Internal DB module.
 
-__all__ = ["DB"]
+End users should use `agentfabric.AgentFabric`.
+"""
+
+__all__: list[str] = []

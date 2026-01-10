@@ -6,7 +6,8 @@ from uuid import UUID
 
 import pytest
 
-from agentfabric import DB
+from agentfabric import AgentFabric
+from agentfabric.db.facade import DB
 from agentfabric.config.spec import ColumnSpec, ConfigSpec, TableSpec
 
 
@@ -55,24 +56,18 @@ tables:
         encoding="utf-8",
     )
 
-    db2 = DB(config_path=str(p))
-    assert db2.engine.url.drivername.startswith("postgresql")
+    dbm, _store = AgentFabric(str(p))
+    assert dbm.engine.url.drivername.startswith("postgresql")
 
 
 def test_db_init_argument_validation() -> None:
     cfg_no_url = _cfg().model_copy(update={"db_url": None})
 
     with pytest.raises(ValueError, match="provide url"):
-        DB(url="", config=cfg_no_url)
+        DB(config=cfg_no_url, url="")
 
     with pytest.raises(ValueError, match="provide url"):
-        DB(url=None, config=cfg_no_url)
-
-    with pytest.raises(ValueError, match="exactly one of config or config_path"):
-        DB(url="postgresql+psycopg://u:p@localhost:5432/db", config=_cfg(), config_path="x.yaml")
-
-    with pytest.raises(ValueError, match="exactly one of config or config_path"):
-        DB(url="postgresql+psycopg://u:p@localhost:5432/db", config=None, config_path=None)  # type: ignore[arg-type]
+        DB(config=cfg_no_url, url=None)
 
 
 def test_db_precomputes_defaults_and_filterable_cols_without_connecting(db: DB) -> None:

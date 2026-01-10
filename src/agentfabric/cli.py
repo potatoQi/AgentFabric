@@ -18,7 +18,7 @@ def _build_parser() -> argparse.ArgumentParser:
     ui.add_argument("--port", type=int, default=8501, help="Streamlit port")
     ui.add_argument(
         "--toolbar-mode",
-        default="viewer",
+        default="developer",
         choices=["auto", "developer", "viewer", "minimal"],
         help=(
             "Streamlit toolbar mode (top-right controls). "
@@ -39,6 +39,11 @@ def _cmd_ui(args: argparse.Namespace) -> int:
     env = os.environ.copy()
     if args.config_path:
         env["AGENTFABRIC_UI_CONFIG_PATH"] = str(args.config_path)
+
+    # Streamlit supports config via CLI flags and env vars; set both for robustness.
+    # Env var name follows Streamlit's convention: STREAMLIT_<SECTION>_<OPTION>.
+    if getattr(args, "toolbar_mode", None):
+        env["STREAMLIT_CLIENT_TOOLBARMODE"] = str(args.toolbar_mode)
 
     try:
         import streamlit  # noqa: F401

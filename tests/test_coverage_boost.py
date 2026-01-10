@@ -8,7 +8,8 @@ import uuid
 import fsspec
 import pytest
 
-from agentfabric import ArtifactStore
+from agentfabric import AgentFabric
+from agentfabric.artifacts.store import ArtifactStore
 from agentfabric.config.spec import ColumnSpec, ConfigSpec, TableSpec
 from agentfabric.db.facade import DB
 from agentfabric.db.query import _split_extra_path
@@ -104,20 +105,18 @@ def test_db_init_argument_validation() -> None:
     )
 
     with pytest.raises(ValueError, match="provide url"):
-        DB(url="", config=cfg)
+        DB(config=cfg, url="")
 
-    with pytest.raises(ValueError, match="exactly one"):
-        DB(url="postgresql+psycopg://u:p@localhost:5432/db", config=cfg, config_path="x.yaml")
-
-    with pytest.raises(ValueError, match="exactly one"):
-        DB(url="postgresql+psycopg://u:p@localhost:5432/db")
+    with pytest.raises(TypeError):
+        DB(url="postgresql+psycopg://u:p@localhost:5432/db")  # type: ignore[call-arg]
 
 
-def test_db_init_with_config_path(tmp_path: Path) -> None:
+def test_agentfabric_init_with_config_path(tmp_path: Path) -> None:
     p = tmp_path / "cfg.yaml"
     p.write_text(
         """
 version: 1
+db_url: postgresql+psycopg://u:p@localhost:5432/db
 
 tables:
   t:
@@ -129,9 +128,9 @@ tables:
         encoding="utf-8",
     )
 
-    db = DB(url="postgresql+psycopg://u:p@localhost:5432/db", config_path=str(p))
-    assert "t" in db.tables
-    assert db._filterable_cols["t"] == {"id"}
+    dbm, _store = AgentFabric(str(p))
+    assert "t" in dbm.tables
+    assert dbm.filterable_cols["t"] == {"id"}
 
 
 def test_db_defaults_apply_to_obj_and_row_without_connecting() -> None:

@@ -9,7 +9,8 @@ import yaml
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-from agentfabric import DB
+from agentfabric import AgentFabric
+from agentfabric.fabric import DBManager
 
 
 def _db_url() -> str | None:
@@ -30,12 +31,13 @@ def schema_name() -> str:
 
 
 @pytest.fixture(scope="module")
-def cfg_path(tmp_path_factory: pytest.TempPathFactory, schema_name: str) -> Path:
+def cfg_path(tmp_path_factory: pytest.TempPathFactory, schema_name: str, db_url: str) -> Path:
     # Use the repo's ACE-Bench example YAML, but override postgres_schema to a random test schema.
     src = Path(__file__).resolve().parents[1] / "examples" / "acebench_schema.yaml"
     data = yaml.safe_load(src.read_text(encoding="utf-8"))
     assert isinstance(data, dict)
     data["postgres_schema"] = schema_name
+    data["db_url"] = db_url
 
     dst = tmp_path_factory.mktemp("acebench_cfg") / "acebench_schema_test.yaml"
     dst.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
@@ -43,21 +45,21 @@ def cfg_path(tmp_path_factory: pytest.TempPathFactory, schema_name: str) -> Path
 
 
 @pytest.fixture(scope="module")
-def db(db_url: str, cfg_path: Path, schema_name: str) -> DB:
-    db = DB(url=db_url, config_path=str(cfg_path))
+def db(cfg_path: Path, schema_name: str) -> DBManager:
+    dbm, _store = AgentFabric(str(cfg_path))
 
-    with db.engine.begin() as conn:
+    with dbm.engine.begin() as conn:
         conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"'))
 
-    db.init_schema()
+    dbm.init_schema()
 
-    yield db
+    yield dbm
 
-    with db.engine.begin() as conn:
+    with dbm.engine.begin() as conn:
         conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE'))
 
 
-def test_acebench_yaml_minimal_insert_and_defaults(db: DB) -> None:
+def test_acebench_yaml_minimal_insert_and_defaults(db: DBManager) -> None:
     Instance = db.models["ace_instance"]
 
     # create_time is non-null with default: now; we rely on SDK default fill.
@@ -76,7 +78,7 @@ def test_acebench_yaml_minimal_insert_and_defaults(db: DB) -> None:
     assert got[0].create_time is not None
 
 
-def test_acebench_yaml_list_columns_roundtrip(db: DB) -> None:
+def test_acebench_yaml_list_columns_roundtrip(db: DBManager) -> None:
     Instance = db.models["ace_instance"]
 
     row = Instance(
@@ -97,7 +99,7 @@ def test_acebench_yaml_list_columns_roundtrip(db: DB) -> None:
     assert got[0].p2p == ["c"]
 
 
-def test_acebench_yaml_fk_violation_is_enforced(db: DB) -> None:
+def test_acebench_yaml_fk_violation_is_enforced(db: DBManager) -> None:
     Traj = db.models["ace_traj"]
 
     # FK references a non-existent instance.
@@ -114,7 +116,7 @@ def test_acebench_yaml_fk_violation_is_enforced(db: DB) -> None:
         db.upsert("ace_traj", t)
 
 
-def test_acebench_yaml_on_delete_restrict_blocks_parent_delete(db: DB) -> None:
+def test_acebench_yaml_on_delete_restrict_blocks_parent_delete(db: DBManager) -> None:
     Instance = db.models["ace_instance"]
     Traj = db.models["ace_traj"]
 

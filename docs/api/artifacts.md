@@ -1,6 +1,6 @@
-# ArtifactStore API（`agentfabric.ArtifactStore`）
+# Store（store 管理器）
 
-`ArtifactStore` 负责“把本地文件写入某个目标存储位置，并返回可回读的 URL”。
+store 负责“把本地文件写入某个目标存储位置，并返回可回读的 URL”
 
 当前实现特点：
 
@@ -10,17 +10,19 @@
 - 支持 `file://` 与其他 fsspec 支持的 scheme（如 `s3://`，取决于环境）
 - 本地写入（file/本地路径）采用原子写（临时文件 + `os.replace`）
 
-## 构造函数
+## 获取 store
 
 ```python
-from agentfabric import ArtifactStore
+from agentfabric import AgentFabric
 
-store = ArtifactStore(base_url: str)
+db, store = AgentFabric("path/to/schema.yaml")
+if store is None:
+    raise RuntimeError("YAML 里没写 artifact_base_url")
 ```
 
-- `base_url`：相对路径写入的基准。
-  - 例：`file:///tmp/agentfabric_artifacts`
-  - 例：`s3://my-bucket/prefix`（需要环境支持）
+说明：
+
+- 需要在 YAML 里写 `artifact_base_url`，比如 `file:///tmp/agentfabric_artifacts`
 
 ## 返回结构：`PutResult`
 
@@ -84,9 +86,12 @@ store.put(patch, "runs/001/patch.txt")   # ValueError
 ### 端到端闭环示例（与 DB 联动）
 
 ```python
-from agentfabric import DB, ArtifactStore
+from agentfabric import AgentFabric
 
-store = ArtifactStore(base_url="file:///tmp/agentfabric_artifacts")
+# config 里需要写 db_url；想要 store 的话还要写 artifact_base_url。
+db, store = AgentFabric("examples/acebench_schema.yaml")
+if store is None:
+    raise RuntimeError("你的配置里没写 artifact_base_url，所以 store 是 None")
 
 # 1) put 本地文件
 res = store.put("/tmp/patch.diff", "runs/001/patch.diff")

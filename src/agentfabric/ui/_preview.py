@@ -5,7 +5,7 @@ from typing import Any
 
 import streamlit as st
 
-from agentfabric import ArtifactStore
+from agentfabric.artifacts.store import ArtifactStore
 
 
 def looks_like_url(v: Any) -> bool:

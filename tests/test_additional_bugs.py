@@ -9,7 +9,8 @@ from uuid import UUID
 
 import pytest
 
-from agentfabric import DB, ArtifactStore
+from agentfabric.artifacts.store import ArtifactStore
+from agentfabric.db.facade import DB
 from agentfabric.config.spec import ColumnSpec, ConfigSpec, TableSpec
 
 

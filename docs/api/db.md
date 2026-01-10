@@ -1,41 +1,20 @@
-# DB API（`agentfabric.DB`）
+# DB（db 管理器）
 
-`DB` 是面向“动态 Schema（YAML/Pydantic）+ PostgreSQL + SQLAlchemy”的轻量 Facade。
+db 是 `AgentFabric(config_path)` 的第一个返回值
 
-- 负责：
-  - 解析配置（`config` / `config_path`）
-  - 生成 SQLAlchemy `MetaData`/`Table`
-  - 动态生成 ORM model（`db.models[table_name]`）
-  - 提供 `add/add_all/query/update/upsert` 这些高频数据库操作
-- 不负责：
-  - 复杂 join/聚合/排序（当前 `query` 没有 `order_by`）
-  - 自动迁移（没有 Alembic 集成）
+主要能力：建表、写入、查询、更新、删除、upsert
 
-## 构造函数
+## 获取 db
 
 ```python
-from agentfabric import DB
-from agentfabric.config.spec import ConfigSpec
+from agentfabric import AgentFabric
 
-db = DB(
-    url: str,
-    *,
-    config: ConfigSpec | None = None,
-    config_path: str | None = None,
-)
+db, store = AgentFabric("path/to/schema.yaml")
 ```
-
-参数语义：
-
-- `url`：SQLAlchemy engine URL。必须非空。
-- `config` 与 `config_path`：必须“二选一”（恰好提供一个）。
-  - `config`：已经解析好的 `ConfigSpec`
-  - `config_path`：YAML 文件路径（内部会调用 `agentfabric.load_config()`）
 
 常见错误：
 
-- `url` 为空：抛 `ValueError("provide url")`
-- `config` 与 `config_path` 同时提供/同时缺失：抛 `ValueError("provide exactly one of config or config_path")`
+- YAML 里没写 `db_url`：抛 `ValueError("provide url (or set db_url in config)")`
 
 ## 属性
 

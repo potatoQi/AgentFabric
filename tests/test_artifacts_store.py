@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from agentfabric import ArtifactStore
+from agentfabric.artifacts.store import ArtifactStore
 
 
 def test_put_requires_existing_local_file(tmp_path: Path) -> None:

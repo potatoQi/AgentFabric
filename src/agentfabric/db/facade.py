@@ -22,19 +22,10 @@ from .query import build_where
 class DB:
     def __init__(
         self,
-        url: str | None = None,
         *,
-        config: ConfigSpec | None = None,
-        config_path: str | None = None,
+        config: ConfigSpec,
+        url: str | None = None,
     ):
-        if (config is None) == (config_path is None):
-            raise ValueError("provide exactly one of config or config_path")
-
-        if config is None:
-            from agentfabric.config.loader import load_config
-
-            config = load_config(config_path)  # type: ignore[arg-type]
-
         if url is None or str(url).strip() == "":
             url = config.db_url
         if not url:

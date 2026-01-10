@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 from sqlalchemy import text
 
-from agentfabric import ArtifactStore, DB
+from agentfabric.artifacts.store import ArtifactStore
+from agentfabric.db.facade import DB
 from agentfabric.config.spec import ColumnSpec, ConfigSpec, TableSpec
 
 

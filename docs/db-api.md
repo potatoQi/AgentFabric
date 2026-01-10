@@ -1,22 +1,21 @@
 # DB API
 
-核心入口：`agentfabric.DB`
+核心入口：`agentfabric.AgentFabric`
 
 ## 初始化
 
 ```python
-from agentfabric import DB
+from agentfabric import AgentFabric
 
-db = DB(
-  url="postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME",
-  config_path="path/to/schema.yaml",
-)
+db, store = AgentFabric("path/to/schema.yaml")
 ```
 
 参数：
-- `url`：SQLAlchemy 数据库 URL（Postgres）
-- `config_path`：YAML schema 路径
-- `config`：也可以直接传 `ConfigSpec`（与 `config_path` 二选一）
+- `config_path`：YAML 配置文件路径
+
+说明：
+- 数据库连接地址从 YAML 的 `db_url` 读取
+- `store` 只有在 YAML 里写了 `artifact_base_url` 才会有值
 
 ## 建表
 

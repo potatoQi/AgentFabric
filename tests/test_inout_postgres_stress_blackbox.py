@@ -6,7 +6,7 @@ import uuid
 import pytest
 from sqlalchemy import text
 
-from agentfabric import DB
+from agentfabric.db.facade import DB
 from agentfabric.config.spec import ColumnSpec, ConfigSpec, TableSpec
 
 

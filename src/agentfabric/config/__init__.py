@@ -1,4 +1,8 @@
-from .loader import load_config
+"""Internal config module.
+
+End users should use `agentfabric.AgentFabric`.
+"""
+
 from .spec import ConfigSpec
 
-__all__ = ["load_config", "ConfigSpec"]
+__all__ = ["ConfigSpec"]

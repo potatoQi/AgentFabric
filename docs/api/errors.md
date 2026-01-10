@@ -6,10 +6,9 @@
 
 ## DB
 
-### `DB.__init__`
+### `AgentFabric`
 
-- `ValueError("provide url")`：url 为空
-- `ValueError("provide exactly one of config or config_path")`：config/config_path 传参不满足二选一
+- `ValueError("provide url (or set db_url in config)")`：YAML 里没写 `db_url`
 
 ### `DB.query`
 
@@ -24,7 +23,7 @@
 ### `DB.upsert`
 
 - `ValueError("no primary key defined; provide conflict_cols")`：`upsert()` 未提供 conflict_cols 且表无主键（通常仅在绕过配置校验/手工构造 schema 时可能发生）
-- `sqlalchemy.exc.IntegrityError`：违反 DB 约束（NOT NULL / UNIQUE / FK / CHECK 等）
+- `IntegrityError`：违反 DB 约束（比如必填没填、重复、外键不匹配等）
 
 ## Filter DSL（build_where）
 
