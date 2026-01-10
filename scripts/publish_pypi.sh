@@ -91,7 +91,7 @@ if command -v git >/dev/null 2>&1; then
 fi
 
 echo "Syncing dev deps (build/twine)…" >&2
-uv sync --dev
+uv sync --dev --locked
 
 rm -rf dist
 
