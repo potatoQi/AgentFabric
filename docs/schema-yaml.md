@@ -111,3 +111,27 @@ foreign_keys:
     - name: idx_repo_commit
       columns: [repo, commit]
   ```
+
+## 3 数据表增量迁移规则
+
+遵循下列规则，能在不破坏线上数据的前提下，通过更新 YAML 来做安全的 schema 演进（典型是“新增字段 / 新增索引 / 新增表”）。
+
+### 3.1 总原则
+
+- 禁止变更：主键（PK）/外键（FK）任何变化都会报错（包括新增/删除/修改/顺序变化）。
+- 列（columns）只允许新增
+  - 已存在的列：不允许改 `type`、不允许改 `nullable`、不允许改 DB 侧 `default`。
+  - 不允许删除已存在的列。
+- 索引（indexes / index: true）只补建不删除：
+  - 配置里新增索引：如果 DB 里缺失，会自动创建。
+  - 配置里删除/改名索引：不会自动 drop（需要你手动清理）。
+
+### 3.2 新增列的约束
+
+新增列时必须满足其一：
+
+- `nullable: true`
+- `nullable: false` 且提供DB 侧默认值（server default）。
+
+注意：当前实现里只有 `default: now` 会映射为 DB 侧 `now()`；像 `default: "Hello"` 这种字面量默认值是 SDK 写入侧补齐，**不属于 server default**，因此不能用于“新增 NOT NULL 列”的自动迁移。
+

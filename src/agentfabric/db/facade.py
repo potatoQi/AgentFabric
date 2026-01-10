@@ -13,6 +13,7 @@ from sqlalchemy.sql import tuple_
 
 from agentfabric.config.spec import ConfigSpec
 from agentfabric.schema.builder import SchemaBuilder
+from agentfabric.schema.migrate import apply_incremental_schema
 from agentfabric.schema.orm import ORMModelFactory
 from agentfabric.schema.registry import SchemaRegistry
 
@@ -57,7 +58,12 @@ class DB:
             self._filterable_cols[tname] = cols
 
     def init_schema(self) -> None:
-        self.metadata.create_all(self.engine)
+        apply_incremental_schema(
+            self.engine,
+            registry=self.registry,
+            metadata=self.metadata,
+            tables=self.tables,
+        )
 
     def add(self, obj: Any) -> None:
         obj = self._apply_sdk_defaults_obj(obj)
