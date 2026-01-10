@@ -38,6 +38,7 @@ def db(db_url: str, schema_name: str) -> DB:
                     "id": ColumnSpec(type="text", nullable=False, filterable=True),
                     "n": ColumnSpec(type="int", nullable=False, filterable=True),
                     "group": ColumnSpec(type="text", nullable=True, filterable=True),
+                    "tags": ColumnSpec(type="list", item_type="text", nullable=True, filterable=True),
                     "msg": ColumnSpec(type="text", nullable=False, default="Hello"),
                 },
             )
@@ -59,7 +60,13 @@ def test_stress_bulk_insert_and_pagination(db: DB) -> None:
     T = db.models["t"]
 
     rows = [
-        T(id=f"k{i}", n=i, group=("A" if i % 2 == 0 else "B"), extra={"tag": "x" if i % 3 == 0 else "y"})
+        T(
+            id=f"k{i}",
+            n=i,
+            group=("A" if i % 2 == 0 else "B"),
+            tags=["x"] if i % 3 == 0 else (["y"] if i % 5 == 0 else ["z"]),
+            extra={"tag": "x" if i % 3 == 0 else "y"},
+        )
         for i in range(200)
     ]
     db.add_all(rows)
@@ -91,6 +98,46 @@ def test_stress_multiple_ops_and_extra_like(db: DB) -> None:
     )
     assert all(0 <= r.n < 200 and r.n != 5 for r in out)
     assert all((r.extra or {}).get("tag") == "x" for r in out)
+
+
+def test_stress_list_contains_filters(db: DB) -> None:
+    # Stress list[text] contains with many rows present.
+    out_x = db.query(
+        "t",
+        {
+            "where": {
+                "tags": {"contains": "x"},
+                "n": {"gte": 0},
+            },
+            "limit": 1000,
+        },
+    )
+    assert out_x, "expected at least some rows with tag x"
+    assert all("x" in (r.tags or []) for r in out_x)
+
+    out_none = db.query(
+        "t",
+        {
+            "where": {
+                "tags": {"contains": "does-not-exist"},
+            },
+            "limit": 1000,
+        },
+    )
+    assert out_none == []
+
+
+def test_stress_list_contains_large_or_group(db: DB) -> None:
+    # Many OR branches; should still execute successfully.
+    where = {
+        "or": [
+            {"tags": {"contains": "x"}},
+            {"tags": {"contains": "y"}},
+            {"tags": {"contains": "z"}},
+        ]
+    }
+    out = db.query("t", {"where": where, "limit": 1000})
+    assert len(out) > 0
 
 
 def test_stress_upsert_last_write_wins(db: DB) -> None:

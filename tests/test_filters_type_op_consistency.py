@@ -102,3 +102,16 @@ def test_list_type_parses_csv_items() -> None:
     # list columns are parsed as CSV of item_type
     assert parse_value("eq", "1,2,3", "list", "int") == [1, 2, 3]
     assert parse_value("ne", "true,false", "list", "bool") == [True, False]
+
+
+def test_list_contains_parses_single_element() -> None:
+    assert parse_value("contains", "3", "list", "int") == 3
+    assert parse_value("contains", " true ", "list", "bool") is True
+    assert parse_value("contains", "abc", "list", "text") == "abc"
+
+
+def test_list_contains_rejects_csv_or_empty() -> None:
+    with pytest.raises(ValueError, match="exactly one element"):
+        parse_value("contains", "1,2", "list", "int")
+    with pytest.raises(ValueError, match="exactly one element"):
+        parse_value("contains", "   ", "list", "int")

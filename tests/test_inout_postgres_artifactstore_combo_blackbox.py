@@ -154,6 +154,43 @@ def test_combo_filters_and_parameter_combinations(db: DB, artifact_base_dir: Pat
     assert len(out2) == 1
     assert out2[0].id == "c2"
 
+    # list[text] element membership filtering on ARRAY
+    out3 = db.query("t", {"where": {"tags": {"contains": "x"}}, "limit": 10})
+    assert {r.id for r in out3} == {"c1", "c2"}
+
+    out4 = db.query("t", {"where": {"tags": {"contains": "y"}}, "limit": 10})
+    assert {r.id for r in out4} == {"c2"}
+
+    # composition: (tags contains x AND n >= 11) OR (id == c1)
+    out5 = db.query(
+        "t",
+        {
+            "where": {
+                "or": [
+                    {
+                        "and": [
+                            {"tags": {"contains": "x"}},
+                            {"n": {"gte": 11}},
+                        ]
+                    },
+                    {"id": {"eq": "c1"}},
+                ]
+            },
+            "limit": 100,
+        },
+    )
+    assert {r.id for r in out5} == {"c1", "c2"}
+
+    # edge cases: invalid RHS should raise
+    with pytest.raises(TypeError, match="does not accept None"):
+        db.query("t", {"where": {"tags": {"contains": None}}})
+
+    with pytest.raises(TypeError, match="expects a scalar element"):
+        db.query("t", {"where": {"tags": {"contains": ["x", "y"]}}})
+
+    with pytest.raises(TypeError, match="expects a text element"):
+        db.query("t", {"where": {"tags": {"contains": 1}}})
+
     # in_: [] should produce empty result, nin: [] should be a no-op
     empty = db.query("t", {"where": {"id": {"in_": []}}})
     assert empty == []

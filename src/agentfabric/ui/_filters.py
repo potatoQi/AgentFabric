@@ -20,6 +20,7 @@ _OP_LABELS: dict[str, str] = {
     "in_": "in",
     "nin": "not in",
     "like": "like",
+    "contains": "contains",
     "is_null": "is null",
     "not_null": "not null",
 }
@@ -31,7 +32,7 @@ def infer_ops(col_type: str) -> list[str]:
     if col_type == "bool":
         return ["eq", "ne", "is_null", "not_null"]
     if col_type == "list":
-        return ["eq", "ne", "is_null", "not_null"]
+        return ["eq", "ne", "contains", "is_null", "not_null"]
     if col_type == "uuid":
         # UUID columns: avoid text ops like `like` (may error / be confusing).
         return ["eq", "ne", "in_", "nin", "is_null", "not_null"]
@@ -129,9 +130,11 @@ def value_placeholder(op: str, type_name: str, item_type_name: str | None) -> st
         # text default
         return "a,b,c"
 
-    # list columns always accept CSV input (per parse_value implementation).
+    # list columns accept CSV for eq/ne, but `contains` expects a single element.
     if type_name == "list":
         it = item_type_name or "text"
+        if op == "contains":
+            return _scalar_hint(it)
         return _csv_hint(it)
 
     # op-specific hints
@@ -171,6 +174,16 @@ def parse_value(op: str, raw: str, type_name: str, item_type_name: str | None) -
         return True
     if op == "not_null":
         return False
+
+    if op == "contains":
+        if type_name != "list":
+            raise ValueError("contains is only supported for list columns")
+        # `contains` expects exactly one scalar element.
+        items = [x.strip() for x in raw.split(",") if x.strip()]
+        if len(items) != 1:
+            raise ValueError("contains expects exactly one element")
+        it = item_type_name or "text"
+        return parse_scalar(items[0], it)
 
     if op in {"in_", "nin"} and type_name != "list":
         # CSV list; parse items based on column type.
@@ -542,17 +555,17 @@ def _submit_selected(table: str, table_spec: Any, field: str) -> None:
         except Exception as e:
             ph = value_placeholder(op, type_name, item_type_name)
             # Keep message short; show it inside the filters panel (stored in session_state).
+            msg = (
+                f"Invalid value (#{i + 1}, op={_OP_LABELS.get(op, op)}). Expected: {ph}."
+            )
             _set_submit_error(
                 table,
                 field,
-                f"Invalid value (#{i + 1}, op={_OP_LABELS.get(op, op)}). Expected: {ph}.",
+                msg,
             )
-            # Ensure the error appears on the *first* Enter: the error banner is
-            # rendered above the form, so we force a rerun after storing it.
-            try:
-                st.rerun()
-            except Exception:
-                pass
+            # Streamlit already reruns after callbacks; calling st.rerun() inside
+            # callbacks is a no-op (and shows a warning banner in some versions).
+            # We keep errors inside the filters panel only.
             return
 
         committed.append(row)

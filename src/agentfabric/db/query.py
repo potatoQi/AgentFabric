@@ -1,8 +1,17 @@
 from __future__ import annotations
 
 from typing import Any
+import datetime as _dt
+import uuid as _uuid
 
 from sqlalchemy import String, and_, cast, or_
+from sqlalchemy.dialects.postgresql import UUID as _PG_UUID
+from sqlalchemy.sql.sqltypes import Boolean as _Boolean
+from sqlalchemy.sql.sqltypes import DateTime as _DateTime
+from sqlalchemy.sql.sqltypes import Float as _Float
+from sqlalchemy.sql.sqltypes import Integer as _Integer
+from sqlalchemy.sql.sqltypes import String as _String
+from sqlalchemy.sql.sqltypes import Text as _Text
 
 
 OPS = {
@@ -15,10 +24,72 @@ OPS = {
     "in_": lambda col, v: col.in_(v),
     "nin": lambda col, v: ~col.in_(v),
     "like": lambda col, v: col.like(v),
+    # PostgreSQL ARRAY element membership: value = ANY(array_col)
+    "contains": lambda col, v: col.any(v),
 }
 
 
 _EXTRA_ALLOWED_OPS = {"eq", "ne", "in_", "nin", "is_null", "like"}
+
+
+def _validate_array_contains_value(expr: Any, field: str, v: Any) -> None:
+    """Validate `contains` RHS value for PostgreSQL ARRAY columns.
+
+    Semantics: for list[X] columns, `contains` expects a single element x of type X.
+    """
+
+    col_type = getattr(expr, "type", None)
+    item_type = getattr(col_type, "item_type", None)
+    if item_type is None:
+        raise TypeError(f"'contains' is only supported for list/ARRAY columns (field '{field}')")
+
+    # Reject list/tuple/set/dict: `contains` is element-membership, not sub-array containment.
+    if isinstance(v, (list, tuple, set, dict)):
+        raise TypeError(f"'contains' expects a scalar element for field '{field}', got {type(v).__name__}")
+
+    # NULL membership is not supported: use is_null/not_null for NULL checks.
+    if v is None:
+        raise TypeError(f"'contains' does not accept None for field '{field}'")
+
+    # Boolean must be checked before int because bool is a subclass of int in Python.
+    if isinstance(item_type, _Boolean):
+        if not isinstance(v, bool):
+            raise TypeError(f"'contains' expects a bool element for field '{field}'")
+        return
+
+    if isinstance(item_type, _Integer):
+        if not isinstance(v, int) or isinstance(v, bool):
+            raise TypeError(f"'contains' expects an int element for field '{field}'")
+        return
+
+    if isinstance(item_type, _Float):
+        # Strict: require float (not int/bool)
+        if not isinstance(v, float):
+            raise TypeError(f"'contains' expects a float element for field '{field}'")
+        return
+
+    if isinstance(item_type, _DateTime):
+        if not isinstance(v, _dt.datetime):
+            raise TypeError(f"'contains' expects a datetime element for field '{field}'")
+        return
+
+    if isinstance(item_type, _PG_UUID):
+        if not isinstance(v, _uuid.UUID):
+            raise TypeError(f"'contains' expects a uuid element for field '{field}'")
+        return
+
+    if isinstance(item_type, (_String, _Text)):
+        if not isinstance(v, str):
+            raise TypeError(f"'contains' expects a text element for field '{field}'")
+        return
+
+    # Fallback: accept string/int/float/bool/datetime/UUID only; otherwise require exact python type match.
+    # This keeps behavior safe even if custom types appear.
+    ok = isinstance(v, (str, int, float, bool, _dt.datetime, _uuid.UUID))
+    if not ok:
+        raise TypeError(
+            f"'contains' received unsupported element type for field '{field}': {type(v).__name__}"
+        )
 
 
 def _split_extra_path(path: str) -> list[str]:
@@ -95,14 +166,28 @@ def _build_field_clauses(table, where: dict[str, Any], *, allowed_fields: set[st
             clauses.append(expr.is_not(None))
 
         for op, fn in OPS.items():
-            if op in cond and cond[op] is not None:
-                v = cond[op]
-                if op in ("in_", "nin") and isinstance(v, list) and len(v) == 0:
-                    # in_ [] => empty result set; nin [] => no-op
-                    if op == "in_":
-                        clauses.append(False)
-                    continue
-                clauses.append(fn(expr, v))
+            if op not in cond:
+                continue
+
+            v = cond[op]
+
+            # Preserve existing semantics: most ops treat None as "unset" (ignored)
+            # except for explicit NULL checks (is_null) and list membership (contains).
+            if v is None:
+                if op == "contains":
+                    _validate_array_contains_value(expr, field, v)
+                continue
+
+            if op in ("in_", "nin") and isinstance(v, list) and len(v) == 0:
+                # in_ [] => empty result set; nin [] => no-op
+                if op == "in_":
+                    clauses.append(False)
+                continue
+
+            if op == "contains":
+                _validate_array_contains_value(expr, field, v)
+
+            clauses.append(fn(expr, v))
 
     return clauses
 

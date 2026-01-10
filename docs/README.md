@@ -286,13 +286,37 @@ where = {
 }
 ```
 
-#### 7) list[]（ARRAY；支持：eq/ne/is_null）
+#### 7) list[]（ARRAY；支持：eq/ne/is_null/contains）
 
 ```python
 where = {
   "tags": {"eq": ["a", "b"]},
   "nums": {"ne": [1, 2, 3]},
   "opt": {"is_null": True},
+}
+```
+
+`contains`：用于判断 list[X] 是否包含某个元素 x（x 的类型必须是 X；否则会抛出错误）。
+
+```python
+# 假设：nums 是 list[int]；tags 是 list[text]
+where = {
+  "nums": {"contains": 3},
+  "tags": {"contains": "a"},
+}
+```
+
+可与 `and`/`or` 组合：
+
+```python
+where = {
+  "or": [
+    {"and": [
+      {"nums": {"contains": 3}},
+      {"tags": {"contains": "a"}},
+    ]},
+    {"tags": {"contains": "b"}},
+  ]
 }
 ```
 
