@@ -68,12 +68,15 @@ load_twine_from_dotenv() {
 
 load_twine_from_dotenv
 
-if [[ -z "${TWINE_USERNAME:-}" || -z "${TWINE_PASSWORD:-}" ]]; then
-  echo "Missing TWINE_USERNAME/TWINE_PASSWORD. Use an API token:" >&2
-  echo "  export TWINE_USERNAME=__token__" >&2
-  echo "  export TWINE_PASSWORD=<your-token>" >&2
-  echo "Or put them in $ROOT/.env as KEY=VALUE (TWINE_USERNAME/TWINE_PASSWORD)." >&2
-  exit 2
+# In DRY_RUN mode we only build + check; uploading is skipped.
+if [[ "${DRY_RUN:-0}" != "1" ]]; then
+  if [[ -z "${TWINE_USERNAME:-}" || -z "${TWINE_PASSWORD:-}" ]]; then
+    echo "Missing TWINE_USERNAME/TWINE_PASSWORD. Use an API token:" >&2
+    echo "  export TWINE_USERNAME=__token__" >&2
+    echo "  export TWINE_PASSWORD=<your-token>" >&2
+    echo "Or put them in $ROOT/.env as KEY=VALUE (TWINE_USERNAME/TWINE_PASSWORD)." >&2
+    exit 2
+  fi
 fi
 
 if command -v git >/dev/null 2>&1; then
