@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 from uuid import uuid4
 
 import fsspec
@@ -135,12 +135,17 @@ class ArtifactStore:
         if not x_path.exists() or not x_path.is_file():
             raise FileNotFoundError(f"x must be an existing local file path: {x_path}")
 
-        url = self._resolve_url(y, z, source=str(x_path))
+        # Security: Decode URL-encoded characters to prevent path traversal bypass
+        y_decoded = unquote(y)
+        # Normalize path separators (handle both / and \)
+        y_normalized = y_decoded.replace('\\', '/')
+        
+        url = self._resolve_url(y_normalized, z, source=str(x_path))
 
         # Security: prevent directory traversal when writing under a local base_url.
         # Only applies to relative targets (joined under base_url). Absolute targets
         # are treated as explicit opt-out.
-        if (not self._is_absolute_target(y)):
+        if (not self._is_absolute_target(y_normalized)):
             parsed = urlparse(url)
             if parsed.scheme in ("", "file"):
                 base_root = self._local_path(self.base_url)
@@ -159,8 +164,8 @@ class ArtifactStore:
                         raise ValueError("directory traversal detected in target path")
 
         # If y targets a file (not a directory), enforce extension match.
-        y_is_dir = y.endswith("/")
-        if not y_is_dir and self._looks_like_file_target(y):
+        y_is_dir = y_normalized.endswith("/")
+        if not y_is_dir and self._looks_like_file_target(y_normalized):
             src_suffix = x_path.suffix
             parsed = urlparse(url)
             dst_path = parsed.path if parsed.scheme != "" else url

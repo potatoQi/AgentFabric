@@ -85,6 +85,15 @@ class DB:
         limit = int(filter.get("limit", 1000))
         offset = int(filter.get("offset", 0))
 
+        # Security: Validate limit and offset to prevent resource exhaustion
+        MAX_LIMIT = 10000
+        if limit < 0:
+            raise ValueError("limit must be non-negative")
+        if limit > MAX_LIMIT:
+            raise ValueError(f"limit cannot exceed {MAX_LIMIT}")
+        if offset < 0:
+            raise ValueError("offset must be non-negative")
+
         clauses = build_where(t, where, allowed_fields=self._filterable_cols.get(table))
         stmt = select(m)
         if clauses:

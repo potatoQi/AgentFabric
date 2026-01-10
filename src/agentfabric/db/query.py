@@ -192,7 +192,13 @@ def _build_field_clauses(table, where: dict[str, Any], *, allowed_fields: set[st
     return clauses
 
 
-def build_where(table, where: dict[str, Any], *, allowed_fields: set[str] | None = None) -> list:
+def build_where(
+    table,
+    where: dict[str, Any],
+    *,
+    allowed_fields: set[str] | None = None,
+    _depth: int = 0
+) -> list:
     """Build SQLAlchemy WHERE clauses from the AgentFabric filter DSL.
 
     Supports two shapes:
@@ -205,7 +211,22 @@ def build_where(table, where: dict[str, Any], *, allowed_fields: set[str] | None
        {"or":  [ {...}, {...} ]}
 
     The new form enables multiple independent constraints on the same field.
+
+    Args:
+        table: SQLAlchemy table object
+        where: Filter specification dict
+        allowed_fields: Set of field names that can be filtered (None = all allowed)
+        _depth: Internal recursion depth counter (for DoS protection)
+
+    Raises:
+        ValueError: If nesting depth exceeds MAX_WHERE_DEPTH (100)
     """
+
+    MAX_WHERE_DEPTH = 100
+    if _depth > MAX_WHERE_DEPTH:
+        raise ValueError(
+            f"where clause nesting depth ({_depth}) exceeds maximum allowed depth ({MAX_WHERE_DEPTH})"
+        )
 
     if not where:
         return []
@@ -225,7 +246,7 @@ def build_where(table, where: dict[str, Any], *, allowed_fields: set[str] | None
             for item in items:
                 if not isinstance(item, dict):
                     raise TypeError("where['and'] items must be dicts")
-                clauses.extend(build_where(table, item, allowed_fields=allowed_fields))
+                clauses.extend(build_where(table, item, allowed_fields=allowed_fields, _depth=_depth + 1))
 
         if "or" in where:
             items = where.get("or")
@@ -235,7 +256,7 @@ def build_where(table, where: dict[str, Any], *, allowed_fields: set[str] | None
             for item in items:
                 if not isinstance(item, dict):
                     raise TypeError("where['or'] items must be dicts")
-                part = build_where(table, item, allowed_fields=allowed_fields)
+                part = build_where(table, item, allowed_fields=allowed_fields, _depth=_depth + 1)
                 if part:
                     or_parts.append(and_(*part))
             if or_parts:
