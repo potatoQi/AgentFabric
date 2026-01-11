@@ -1,6 +1,6 @@
 [project]
 name = "agentfabric"
-version = "0.2.0"
+version = "0.2.1"
 description = "Config-driven database component for agent pipelines (PostgreSQL + SQLAlchemy + Pydantic + fsspec)."
 readme = "README.md"
 requires-python = ">=3.10"

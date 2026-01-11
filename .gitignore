@@ -12,3 +12,4 @@ DESIGN.md
 .mypy_cache/
 .coverage
 tmp/
+.github/skills/
