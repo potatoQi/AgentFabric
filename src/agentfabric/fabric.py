@@ -52,22 +52,22 @@ class DBManager:
     def init_schema(self) -> None:
         self.__db.init_schema()
 
-    def add(self, obj: Any) -> None:
-        self.__db.add(obj)
+    def add(self, obj: Any) -> Any:
+        return self.__db.add(obj)
 
-    def add_all(self, objs: list[Any]) -> None:
-        self.__db.add_all(objs)
+    def add_all(self, objs: list[Any]) -> list[Any]:
+        return self.__db.add_all(objs)
 
-    def query(self, table: str, filter: dict[str, Any], *, as_dict: bool = False) -> list[Any]:
+    def query(self, table: str, filter: dict[str, Any], as_dict: bool = False) -> list[Any]:
         return self.__db.query(table, filter, as_dict=as_dict)
 
-    def update(self, table: str, where: dict, patch: dict) -> int:
+    def update(self, table: str, where: dict, patch: dict) -> list[Any]:
         return self.__db.update(table, where, patch)
 
     def delete_where(self, table: str, where: dict) -> int:
         return self.__db.delete_where(table, where)
 
-    def upsert(self, table: str, obj: Any, *, conflict_cols: list[str] | None = None) -> Any:
+    def upsert(self, table: str, obj: Any, conflict_cols: list[str] | None = None) -> Any:
         return self.__db.upsert(table, obj, conflict_cols=conflict_cols)
 
     def delete_by_pk(self, table: str, rows: list[dict[str, Any]]) -> int:

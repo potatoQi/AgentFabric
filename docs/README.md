@@ -46,17 +46,17 @@
 - 功能：在数据库里创建配置中写到的所有表, 若表已存在则忽略
 - 返回：`None`
 
-### `def add(self, obj: Any) -> None`
+### `def add(self, obj: Any) -> Any`
 - 功能：新增一条数据到某个表
 - 参数1：`obj`：要写入的一条数据对象，通常用 `db.models["表名"](...)` 创建
-- 返回：`None`
+- 返回：`Any`
 
-### `def add_all(self, objs: list[Any]) -> None`
+### `def add_all(self, objs: list[Any]) -> list[Any]`
 - 功能：一次新增多条数据到某个表
 - 参数1：`objs`：要写入的数据对象列表
-- 返回：`None`
+- 返回：`list[Any]`，返回写入后的数据对象列表
 
-### `def query(self, table: str, filter: dict, *, as_dict: bool = False) -> list[Any]`
+### `def query(self, table: str, filter: dict, as_dict: bool = False) -> list[Any]`
 - 功能：按筛选条件查询某个表的数据
 - 参数1：`table`：表名（配置里的 key）
 - 参数2：`filter`：查询条件与分页参数，结构如下
@@ -84,24 +84,27 @@
   )
   ```
 
-### `def update(self, table: str, where: dict, patch: dict) -> int`
+### `def update(self, table: str, where: dict, patch: dict) -> list[Any]`
 - 功能：对满足 where 的行执行更新
 - 参数1：`table`：表名  
 - 参数2：`where`：筛选条件（不能为空）  
 - 参数3：`patch`：要更新的列值（键为列名）
-- 返回：`int`，影响行数（rowcount）
+- 返回：`list[Any]`，返回更新后的数据对象列表
 
-### `def upsert(self, table: str, obj: Any, *, conflict_cols: list[str] | None = None) -> Any`
+### `def upsert(self, table: str, obj: Any, conflict_cols: list[str] | None = None) -> Any`
 - 功能：写入一条数据，如果已存在就更新，不存在就新增
 - 参数1：`table`：表名
 - 参数2：`obj`：要写入的一条数据对象
 - 参数3：`conflict_cols`：用哪些列判断“已存在”
   - `None`：默认使用该表配置的 `primary_key`
+  - 注意：`conflict_cols` 必须对应数据库里“可唯一定位一行”的约束（PRIMARY KEY / UNIQUE / EXCLUSION）。
+  - 如果你传的列（或列组合）在数据库里没有对应的唯一约束，Postgres 会直接拒绝执行这条 `ON CONFLICT (...)` 语句并抛错。
 - 返回：`Any`，返回写入后的那条数据对象
 
 - 常见异常：
   - `ValueError("no primary key defined; provide conflict_cols")`：表无主键且未提供 conflict_cols
   - `IntegrityError`：写入的数据不符合数据库的约束，比如必填没填、重复、外键不匹配
+  - `ProgrammingError`（或其他 DBAPI/SQLAlchemy 异常）：例如 `conflict_cols` 没有匹配到任何唯一/排他约束时会报错。
 
 ### `def delete_where(self, table: str, where: dict) -> int`
 - 功能：删除满足 where 的行（安全约束：where 不能为空）

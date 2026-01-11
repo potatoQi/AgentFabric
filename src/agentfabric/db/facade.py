@@ -65,19 +65,21 @@ class DB:
             tables=self.tables,
         )
 
-    def add(self, obj: Any) -> None:
+    def add(self, obj: Any) -> Any:
         obj = self._apply_sdk_defaults_obj(obj)
         with self.Session() as s:
             s.add(obj)
             s.commit()
+        return obj
 
-    def add_all(self, objs: list[Any]) -> None:
+    def add_all(self, objs: list[Any]) -> list[Any]:
         objs = [self._apply_sdk_defaults_obj(o) for o in objs]
         with self.Session() as s:
             s.add_all(objs)
             s.commit()
+        return objs
 
-    def query(self, table: str, filter: dict, *, as_dict: bool = False) -> list[Any]:
+    def query(self, table: str, filter: dict, as_dict: bool = False) -> list[Any]:
         t = self.tables[table]
         m = self.models[table]
 
@@ -97,17 +99,19 @@ class DB:
                 return items
             return [self._obj_to_dict(table, obj) for obj in items]
 
-    def update(self, table: str, where: dict, patch: dict) -> int:
+    def update(self, table: str, where: dict, patch: dict) -> list[Any]:
         t = self.tables[table]
         clauses = build_where(t, where, allowed_fields=self._filterable_cols.get(table))
         if not clauses:
             raise ValueError("update requires non-empty where")
 
-        stmt = update(t).where(*clauses).values(**patch)
+        stmt = update(t).where(*clauses).values(**patch).returning(t)
         with self.Session() as s:
-            res = s.execute(stmt)
+            rows = list(s.execute(stmt).mappings().all())
             s.commit()
-            return int(res.rowcount or 0)
+
+        model = self.models[table]
+        return [model(**dict(r)) for r in rows]
 
     def delete_where(self, table: str, where: dict) -> int:
         """Delete rows matching a filter DSL `where`.
@@ -126,7 +130,7 @@ class DB:
             s.commit()
             return int(res.rowcount or 0)
 
-    def upsert(self, table: str, obj: Any, *, conflict_cols: list[str] | None = None) -> Any:
+    def upsert(self, table: str, obj: Any, conflict_cols: list[str] | None = None) -> Any:
         # Optional convenience: keeps idempotency without exposing Session.
         t = self.tables[table]
         row = self._obj_to_dict(table, obj, include_extra=True)
