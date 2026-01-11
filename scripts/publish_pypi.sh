@@ -20,7 +20,7 @@ set -euo pipefail
 # 发布流程:
 # uv run pytest -q 跑完单测
 # bash scripts/run_blackbox_postgres_tests.sh 黑盒测试跑完
-# 更改 pyproject.toml 版本号, commit + push github
+# 更改 pyproject.toml 和 uv.lock 中的版本号, commit + push github
 # 打 tag 并 push github
 # DRY_RUN=1 bash scripts/publish_pypi.sh pypi 走一遍干跑
 # bash scripts/publish_pypi.sh pypi 发布
